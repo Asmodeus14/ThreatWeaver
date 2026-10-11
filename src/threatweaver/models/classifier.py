@@ -11,7 +11,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from threatweaver.models.encoder import ThreatEncoder
-from threatweaver.scanner.feature_extractor import SCHEMA_VERSION
+
+SCHEMA_VERSION = "1.0"
+
 
 
 @dataclass

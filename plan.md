@@ -134,15 +134,17 @@ ThreatWeaver avoids simplistic "AI classifier" claims by explicitly differentiat
 | Milestone 4: On-Demand Scanner & Reporting | **Completed** | Multi-threaded scan service, cancellation, rich CLI, evidence attribution, local history |
 | Milestone 5: Safe Reversible Quarantine | **Completed** | Pre/post SHA-256 verification, XOR neutralization, Windows path shield, audit log, dry-run |
 | Milestone 6: Real-Time Research & Architecture | **Completed** | Observational user-mode watcher + complete Minifilter driver specification & threat model |
+| Milestone 7: Master Apple UI & Threat Network | **Completed** | 9-screen Apple Minimalist UI, interactive HTML5 Canvas Threat Network with spring physics, 4-tab contextual details panel, Family Explorer, and Continual Learning Timeline |
 
 ---
 
 ## 5. Verification & Acceptance Results
 
-- **Automated Test Suite**: 35/35 tests passing across PE parsing, feature extraction, PyTorch models, continual learning, quarantine isolation, scan service, and CLI (`tests/`).
+- **Automated Test Suite**: 48/48 tests passing across PE parsing, feature extraction, PyTorch models, continual learning, quarantine isolation, scan service, CLI, and HTTP server REST API (`tests/`).
 - **Continual Learning Experiment**: Successfully trained on 5 temporal batches, saved calibrated checkpoint to `artifacts/checkpoints/threatweaver_v1.pt`, generated structured results in `reports/continual_learning_results.json`.
 - **Live Scanning Validation**: Successfully scanned local executables with streaming progress, formatted tables, and generated `reports/self_scan.json` and `reports/self_scan.md`.
 - **Quarantine Validation**: Completed full quarantine, XOR neutralization, and restoration cycle with exact SHA-256 integrity verification.
+- **Master UI & Threat Network**: Delivered zero-dependency Canvas-based relationship explorer, macOS-inspired 9-screen layout, contextual attribution panel, and real-time REST integration.
 
 
 ---
