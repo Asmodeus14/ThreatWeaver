@@ -1,0 +1,23 @@
+# Data pipeline configuration
+schema_version: "1.0"
+feature_dim: 256
+
+# PE Static Parsing Constraints
+pe_parser:
+  max_file_size_bytes: 104857600  # 100 MB max file size for safety
+  parse_timeout_seconds: 15.0     # 15 seconds max per file
+  compute_byte_entropy: true
+  max_imported_symbols_sample: 256
+  max_sections_sample: 32
+
+# Dataset Configuration
+dataset:
+  name: "threatweaver_static_pe"
+  cache_dir: "data/cache"
+  temporal_batches: 5
+  train_split: 0.70
+  val_split: 0.15
+  test_split: 0.15
+  batch_size: 64
+  num_workers: 0  # Safe default on Windows
+  seed: 42

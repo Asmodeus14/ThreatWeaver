@@ -1,0 +1,29 @@
+# Python / Virtual Environment
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# ThreatWeaver Data & Models
+data/
+*.pt
+*.pth
+*.onnx
+*.bin
+quarantine_store/
+reports/scan_*.json
+artifacts/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE & OS
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini

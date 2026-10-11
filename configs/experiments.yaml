@@ -1,0 +1,34 @@
+# Continual Learning & Catastrophic Forgetting Experiment Configuration
+experiment:
+  name: "continual_learning_benchmark"
+  random_seeds: [42, 1337]
+  num_temporal_batches: 5
+  batch_sample_size: 200
+  buffer_capacity: 100            # Fixed replay buffer size
+  label_budget_per_batch: 50      # Budget for selecting replay samples
+
+strategies:
+  - id: "none"
+    name: "No Replay (Naive Sequential)"
+    description: "Trains on current batch only without replay memory."
+  - id: "random"
+    name: "Uniform Random Replay"
+    description: "Maintains a bounded reservoir sample of verified prior samples."
+  - id: "uncertainty"
+    name: "Uncertainty-Guided Replay"
+    description: "Prioritizes samples with highest predictive entropy / decision boundary proximity."
+  - id: "uncertainty_diversity"
+    name: "Uncertainty + Diversity Replay"
+    description: "Balances high prediction uncertainty with embedding cluster coverage."
+
+metrics:
+  track_macro_f1: true
+  track_per_class: true
+  track_forgetting: true
+  track_backward_transfer: true
+  track_novelty_auroc: true
+  track_latency_and_ram: true
+
+output:
+  results_dir: "reports/experiments"
+  save_plots_and_tables: true

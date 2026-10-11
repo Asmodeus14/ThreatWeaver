@@ -1,0 +1,432 @@
+{
+  "metadata": {
+    "num_temporal_batches": 5,
+    "buffer_capacity": 100,
+    "label_budget_per_batch": 50,
+    "seeds": [
+      42,
+      1337
+    ],
+    "timestamp": "2026-10-11 20:07:00"
+  },
+  "strategy_summaries": {
+    "none": {
+      "name": "A. No Replay (Naive)",
+      "macro_f1_mean": 1.0,
+      "macro_f1_std": 0.0,
+      "forgetting_mean": 0.0,
+      "forgetting_std": 0.0,
+      "bwt_mean": 0.0,
+      "bwt_std": 0.0,
+      "fpr_mean": 0.0,
+      "fpr_std": 0.0,
+      "time_sec_mean": 2.6767256259918213
+    },
+    "random": {
+      "name": "B. Uniform Random Replay",
+      "macro_f1_mean": 1.0,
+      "macro_f1_std": 0.0,
+      "forgetting_mean": 0.0,
+      "forgetting_std": 0.0,
+      "bwt_mean": 0.0,
+      "bwt_std": 0.0,
+      "fpr_mean": 0.0,
+      "fpr_std": 0.0,
+      "time_sec_mean": 1.5053201913833618
+    },
+    "uncertainty": {
+      "name": "C. Uncertainty-Guided Replay",
+      "macro_f1_mean": 1.0,
+      "macro_f1_std": 0.0,
+      "forgetting_mean": 0.0,
+      "forgetting_std": 0.0,
+      "bwt_mean": 0.0,
+      "bwt_std": 0.0,
+      "fpr_mean": 0.0,
+      "fpr_std": 0.0,
+      "time_sec_mean": 1.4726455211639404
+    },
+    "uncertainty_diversity": {
+      "name": "D. Uncertainty + Diversity Replay",
+      "macro_f1_mean": 1.0,
+      "macro_f1_std": 0.0,
+      "forgetting_mean": 0.0,
+      "forgetting_std": 0.0,
+      "bwt_mean": 0.0,
+      "bwt_std": 0.0,
+      "fpr_mean": 0.0,
+      "fpr_std": 0.0,
+      "time_sec_mean": 1.8029298782348633
+    }
+  },
+  "raw_runs": [
+    {
+      "strategy": "none",
+      "seed": 42,
+      "final_macro_f1": 1.0,
+      "catastrophic_forgetting": 0.0,
+      "backward_transfer": 0.0,
+      "final_fpr": 0.0,
+      "training_time_sec": 4.080102920532227,
+      "r_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    {
+      "strategy": "none",
+      "seed": 1337,
+      "final_macro_f1": 1.0,
+      "catastrophic_forgetting": 0.0,
+      "backward_transfer": 0.0,
+      "final_fpr": 0.0,
+      "training_time_sec": 1.273348331451416,
+      "r_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    {
+      "strategy": "random",
+      "seed": 42,
+      "final_macro_f1": 1.0,
+      "catastrophic_forgetting": 0.0,
+      "backward_transfer": 0.0,
+      "final_fpr": 0.0,
+      "training_time_sec": 1.5624654293060303,
+      "r_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    {
+      "strategy": "random",
+      "seed": 1337,
+      "final_macro_f1": 1.0,
+      "catastrophic_forgetting": 0.0,
+      "backward_transfer": 0.0,
+      "final_fpr": 0.0,
+      "training_time_sec": 1.4481749534606934,
+      "r_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    {
+      "strategy": "uncertainty",
+      "seed": 42,
+      "final_macro_f1": 1.0,
+      "catastrophic_forgetting": 0.0,
+      "backward_transfer": 0.0,
+      "final_fpr": 0.0,
+      "training_time_sec": 1.4766261577606201,
+      "r_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    {
+      "strategy": "uncertainty",
+      "seed": 1337,
+      "final_macro_f1": 1.0,
+      "catastrophic_forgetting": 0.0,
+      "backward_transfer": 0.0,
+      "final_fpr": 0.0,
+      "training_time_sec": 1.4686648845672607,
+      "r_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    {
+      "strategy": "uncertainty_diversity",
+      "seed": 42,
+      "final_macro_f1": 1.0,
+      "catastrophic_forgetting": 0.0,
+      "backward_transfer": 0.0,
+      "final_fpr": 0.0,
+      "training_time_sec": 1.7965795993804932,
+      "r_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      ]
+    },
+    {
+      "strategy": "uncertainty_diversity",
+      "seed": 1337,
+      "final_macro_f1": 1.0,
+      "catastrophic_forgetting": 0.0,
+      "backward_transfer": 0.0,
+      "final_fpr": 0.0,
+      "training_time_sec": 1.8092801570892334,
+      "r_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          0.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      ]
+    }
+  ]
+}

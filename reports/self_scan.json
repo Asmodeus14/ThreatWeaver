@@ -1,0 +1,692 @@
+{
+  "scan_id": "323cbdca",
+  "target_path": "C:\\CODE\\ThreatWeaver",
+  "start_time": "2026-10-11 19:56:06",
+  "end_time": "2026-10-11 19:56:42",
+  "duration_seconds": 36.24,
+  "model_version": "ThreatWeaver-v1.0",
+  "summary": {
+    "total_scanned": 35,
+    "likely_benign": 0,
+    "suspicious": 34,
+    "unfamiliar": 0,
+    "unsupported": 1,
+    "analysis_errors": 0
+  },
+  "results": [
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\setuptools\\cli-32.exe",
+      "file_name": "cli-32.exe",
+      "file_size_bytes": 11776,
+      "sha256": "32acc1bc543116cbe2cff10cb867772df2f254ff2634c870aef0b46c4b696fdb",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to evasion: isdebuggerpresent",
+        "Imports APIs related to process_exec: createprocessa, system",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 3407.58,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\numpy.libs\\msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll",
+      "file_name": "msvcp140-a4c2229bdc2a2a630acdc095b4d86008.dll",
+      "file_size_bytes": 575056,
+      "sha256": "a4c2229bdc2a2a630acdc095b4d86008e5c3e3bc7773174354f3da4f5beb9cde",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Anomalous or zeroed PE compilation timestamp",
+        "Imports APIs related to dynamic_load: getprocaddress",
+        "Imports APIs related to evasion: isdebuggerpresent, gettickcount",
+        "Imports APIs related to process_exec: system",
+        "Detected suspicious string pattern: url",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 3469.73,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\setuptools\\cli-64.exe",
+      "file_name": "cli-64.exe",
+      "file_size_bytes": 14336,
+      "sha256": "bbb3de5707629e6a60a0c238cd477b28f07f0066982fda953fa6fcec39073a4a",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to evasion: isdebuggerpresent",
+        "Imports APIs related to process_exec: createprocessa, system",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 2760.9,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\setuptools\\cli-arm64.exe",
+      "file_name": "cli-arm64.exe",
+      "file_size_bytes": 13824,
+      "sha256": "b9a7d08da880dfac8bcf548eba4b06fb59b6f09b17d33148a0f6618328926c61",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to process_exec: createprocessa, system",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 2527.86,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\setuptools\\cli.exe",
+      "file_name": "cli.exe",
+      "file_size_bytes": 11776,
+      "sha256": "32acc1bc543116cbe2cff10cb867772df2f254ff2634c870aef0b46c4b696fdb",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to evasion: isdebuggerpresent",
+        "Imports APIs related to process_exec: createprocessa, system",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 2552.52,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\setuptools\\gui-32.exe",
+      "file_name": "gui-32.exe",
+      "file_size_bytes": 11776,
+      "sha256": "85dae1e95d77845f2cb59bcac3d4afe74bbe4c91a9bcc5bf4a71cd43104dbe7c",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to evasion: isdebuggerpresent",
+        "Imports APIs related to process_exec: createprocessa, system",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 2677.0,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\setuptools\\gui-64.exe",
+      "file_name": "gui-64.exe",
+      "file_size_bytes": 14336,
+      "sha256": "3471b6140eadc6412277dbbefe3fef8c345a0f1a59776086b80a3618c3a83e3b",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to evasion: isdebuggerpresent",
+        "Imports APIs related to process_exec: createprocessa, system",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 2628.16,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\setuptools\\gui-arm64.exe",
+      "file_name": "gui-arm64.exe",
+      "file_size_bytes": 13824,
+      "sha256": "e694f4743405c8b5926ff457db6fe7f1a12dec7c16a9c3864784d3f4e07ae097",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to process_exec: createprocessa, system",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 2500.47,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\setuptools\\gui.exe",
+      "file_name": "gui.exe",
+      "file_size_bytes": 11776,
+      "sha256": "85dae1e95d77845f2cb59bcac3d4afe74bbe4c91a9bcc5bf4a71cd43104dbe7c",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to evasion: isdebuggerpresent",
+        "Imports APIs related to process_exec: createprocessa, system",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 3189.75,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\sklearn\\.libs\\msvcp140.dll",
+      "file_name": "msvcp140.dll",
+      "file_size_bytes": 643512,
+      "sha256": "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to dynamic_load: getprocaddress",
+        "Imports APIs related to evasion: gettickcount",
+        "Imports APIs related to process_exec: system",
+        "Detected suspicious string pattern: url",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 5917.86,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\numpy.libs\\libscipy_openblas64_-327b2e0bcffce2882e0dc04cdeb4eaa6.dll",
+      "file_name": "libscipy_openblas64_-327b2e0bcffce2882e0dc04cdeb4eaa6.dll",
+      "file_size_bytes": 20495360,
+      "sha256": "327b2e0bcffce2882e0dc04cdeb4eaa6382ed4dba29871b6176fa157782f484a",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Section .bss has zero raw size but non-zero virtual size (potential unpack target)",
+        "Imports APIs related to injection: setthreadcontext",
+        "Imports APIs related to evasion: isdebuggerpresent, outputdebugstringa, gettickcount",
+        "Imports APIs related to process_exec: system",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 19414.23,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\scipy.libs\\libscipy_openblas-197ee2fc9b4d071f7e048078cac74115.dll",
+      "file_name": "libscipy_openblas-197ee2fc9b4d071f7e048078cac74115.dll",
+      "file_size_bytes": 20262912,
+      "sha256": "197ee2fc9b4d071f7e048078cac741151a6585d871061cf5f88c0c73e31963a5",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Section .bss has zero raw size but non-zero virtual size (potential unpack target)",
+        "Imports APIs related to injection: setthreadcontext",
+        "Imports APIs related to evasion: isdebuggerpresent, outputdebugstringa, gettickcount",
+        "Imports APIs related to process_exec: system",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 19983.96,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\sklearn\\.libs\\vcomp140.dll",
+      "file_name": "vcomp140.dll",
+      "file_size_bytes": 212920,
+      "sha256": "95d4ce4a6802d1e18b5e0e1722cc30ea72ca7e033f83828f05c0b7b993fe7cbf",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to injection: createremotethread",
+        "Imports APIs related to dynamic_load: loadlibraryexw, getprocaddress",
+        "Imports APIs related to evasion: isdebuggerpresent, outputdebugstringw, gettickcount",
+        "Imports APIs related to process_exec: system",
+        "Detected suspicious string pattern: url",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 6612.22,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\torch\\lib\\c10.dll",
+      "file_name": "c10.dll",
+      "file_size_bytes": 1113600,
+      "sha256": "6337930e5825b830242d8470577b52fb333e02926d5b7608221ac6a2a813a57c",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to dynamic_load: loadlibrarya, getprocaddress",
+        "Imports APIs related to evasion: isdebuggerpresent",
+        "Imports APIs related to process_exec: system",
+        "Detected suspicious string pattern: url",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 2187.01,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\torch\\bin\\protoc.exe",
+      "file_name": "protoc.exe",
+      "file_size_bytes": 2809856,
+      "sha256": "1cbe3f0b2982c176fe94b30cb0662fde45dce4ef5773fc65d5d71c699ca8d000",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to evasion: isdebuggerpresent",
+        "Imports APIs related to process_exec: createprocessw, system",
+        "Detected suspicious string pattern: powershell",
+        "Detected suspicious string pattern: cmd",
+        "Detected suspicious string pattern: url",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 4867.97,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\torch\\lib\\shm.dll",
+      "file_name": "shm.dll",
+      "file_size_bytes": 15360,
+      "sha256": "6a98ce447e49bd3cb5d1c87790193de4bd24b4811694eca9342f27bb5fc84ce5",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to evasion: isdebuggerpresent",
+        "Imports APIs related to process_exec: system",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 1849.35,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\torch\\lib\\libiompstubs5md.dll",
+      "file_name": "libiompstubs5md.dll",
+      "file_size_bytes": 44160,
+      "sha256": "c477314c1b489c75455b9738452760cd275a254822762079e001e27f79eb25cb",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to evasion: isdebuggerpresent",
+        "Imports APIs related to process_exec: system",
+        "Detected suspicious string pattern: url",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 1991.51,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\torch\\lib\\libiomp5md.dll",
+      "file_name": "libiomp5md.dll",
+      "file_size_bytes": 1617536,
+      "sha256": "de6d18b2dec5811f7932950282a4c8218c5f287db04ff320dcbaa74733d6fcce",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to dynamic_load: loadlibrarya, loadlibraryexa, getprocaddress",
+        "Imports APIs related to evasion: isdebuggerpresent",
+        "Imports APIs related to process_exec: createprocessa, system",
+        "Detected suspicious string pattern: cmd",
+        "Detected suspicious string pattern: url",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 3438.02,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\torch\\lib\\torch_global_deps.dll",
+      "file_name": "torch_global_deps.dll",
+      "file_size_bytes": 9728,
+      "sha256": "1f0e049098512be5edad11cab57587453aea05f96868d0491a8e96711037f44f",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to evasion: isdebuggerpresent",
+        "Imports APIs related to process_exec: system",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 262.01,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\torch\\lib\\torch.dll",
+      "file_name": "torch.dll",
+      "file_size_bytes": 9728,
+      "sha256": "276fabc182514d5b09b708d90994a2ce84980a0dd89999ffc555cb58b8eb210d",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to evasion: isdebuggerpresent",
+        "Imports APIs related to process_exec: system",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 263.01,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\torch\\lib\\uv.dll",
+      "file_name": "uv.dll",
+      "file_size_bytes": 195072,
+      "sha256": "fa569e682fc5fb7a8eb94c6829af9f30a569748dbbc6bce39735d48bc960bcf8",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to dynamic_load: loadlibrarya, loadlibraryexw, getprocaddress",
+        "Imports APIs related to evasion: isdebuggerpresent",
+        "Imports APIs related to network: wsastartup, connect, send, recv",
+        "Imports APIs related to process_exec: createprocessw, system",
+        "Detected suspicious string pattern: ip",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 1286.41,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Scripts\\f2py.exe",
+      "file_name": "f2py.exe",
+      "file_size_bytes": 41461,
+      "sha256": "caa4a69538c96df616c95b7ba1b87e7faf4828ee4f2b2d6bcf0e1e08fe024dbf",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to dynamic_load: getprocaddress",
+        "Imports APIs related to process_exec: createprocessa",
+        "Detected suspicious string pattern: url",
+        "Detected suspicious string pattern: ip",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 1346.88,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Scripts\\markdown-it.exe",
+      "file_name": "markdown-it.exe",
+      "file_size_bytes": 41465,
+      "sha256": "3dd89505b7a23928e78ad80951fd9cc1d85c56f54e1531fc124081ec00684dda",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to dynamic_load: getprocaddress",
+        "Imports APIs related to process_exec: createprocessa",
+        "Detected suspicious string pattern: url",
+        "Detected suspicious string pattern: ip",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 1500.4,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Scripts\\isympy.exe",
+      "file_name": "isympy.exe",
+      "file_size_bytes": 41450,
+      "sha256": "419cdaf896ddc443ca3e5c8ff3d6f7d1bdf26ea9e639672f964c229135d200a8",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to dynamic_load: getprocaddress",
+        "Imports APIs related to process_exec: createprocessa",
+        "Detected suspicious string pattern: url",
+        "Detected suspicious string pattern: ip",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 1888.51,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Scripts\\numpy-config.exe",
+      "file_name": "numpy-config.exe",
+      "file_size_bytes": 41461,
+      "sha256": "d1e5fff73e2d5e98ca37c77d244337251f95841e8e87e4cdb4d66eceb247e7df",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to dynamic_load: getprocaddress",
+        "Imports APIs related to process_exec: createprocessa",
+        "Detected suspicious string pattern: url",
+        "Detected suspicious string pattern: ip",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 1477.26,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Scripts\\py.test.exe",
+      "file_name": "py.test.exe",
+      "file_size_bytes": 41476,
+      "sha256": "5c17b3a13efa0378d79f0e8e69d6a7bfbbaa436f4a58865ba27e072df848b667",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to dynamic_load: getprocaddress",
+        "Imports APIs related to process_exec: createprocessa",
+        "Detected suspicious string pattern: url",
+        "Detected suspicious string pattern: ip",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 1460.48,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Scripts\\pygmentize.exe",
+      "file_name": "pygmentize.exe",
+      "file_size_bytes": 41460,
+      "sha256": "44e14ada0816d72caa3ac7aaf349884da1b267c449f9e2fe4e0966827e29c002",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to dynamic_load: getprocaddress",
+        "Imports APIs related to process_exec: createprocessa",
+        "Detected suspicious string pattern: url",
+        "Detected suspicious string pattern: ip",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 2097.91,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Scripts\\pytest.exe",
+      "file_name": "pytest.exe",
+      "file_size_bytes": 41476,
+      "sha256": "5c17b3a13efa0378d79f0e8e69d6a7bfbbaa436f4a58865ba27e072df848b667",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to dynamic_load: getprocaddress",
+        "Imports APIs related to process_exec: createprocessa",
+        "Detected suspicious string pattern: url",
+        "Detected suspicious string pattern: ip",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 1708.86,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Scripts\\pythonw.exe",
+      "file_name": "pythonw.exe",
+      "file_size_bytes": 258840,
+      "sha256": "5cf904d0e6099883c63663d8ca6a7d10f7ea9558ec3892efea4e5f637548d59f",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to dynamic_load: loadlibraryexw, getprocaddress",
+        "Imports APIs related to evasion: isdebuggerpresent",
+        "Imports APIs related to process_exec: createprocessw, system",
+        "Detected suspicious string pattern: url",
+        "Detected suspicious string pattern: ip",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 1578.76,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Scripts\\python.exe",
+      "file_name": "python.exe",
+      "file_size_bytes": 270104,
+      "sha256": "41123879d2e991377997acadf5f0cf8f34fa10d86362eded8c69b6041e2893b5",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to dynamic_load: loadlibraryexw, getprocaddress",
+        "Imports APIs related to evasion: isdebuggerpresent",
+        "Imports APIs related to process_exec: createprocessw, system",
+        "Detected suspicious string pattern: url",
+        "Detected suspicious string pattern: ip",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 1687.27,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Scripts\\threatweaver.exe",
+      "file_name": "threatweaver.exe",
+      "file_size_bytes": 41464,
+      "sha256": "13f2fff050dbcb9c1b1dfb2e5341e53b849d25bd1cb542de23096bc7c61554b4",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to dynamic_load: getprocaddress",
+        "Imports APIs related to process_exec: createprocessa",
+        "Detected suspicious string pattern: url",
+        "Detected suspicious string pattern: ip",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 2810.64,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\torch\\lib\\torch_python.dll",
+      "file_name": "torch_python.dll",
+      "file_size_bytes": 20270080,
+      "sha256": "5539b241a5ca8a9a5403c789cf2c468966e4e03284f5b5e1efc6a30415b4ace7",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to process_exec: system",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 11227.19,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Scripts\\torchfrtrace.exe",
+      "file_name": "torchfrtrace.exe",
+      "file_size_bytes": 41486,
+      "sha256": "b8f9647b216a81e49b1208ec627d8bb6cfa3052731b1202334d838e01f1ddabe",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to dynamic_load: getprocaddress",
+        "Imports APIs related to process_exec: createprocessa",
+        "Detected suspicious string pattern: url",
+        "Detected suspicious string pattern: ip",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 2734.9,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Scripts\\torchrun.exe",
+      "file_name": "torchrun.exe",
+      "file_size_bytes": 41465,
+      "sha256": "eff837db404e8e1ff657c0ad2ab5d24617626130b0bca0b427d840aeb9c4d4ca",
+      "verdict": "Suspicious",
+      "malware_probability": 1.0,
+      "novelty_score": 1.0,
+      "is_novel": true,
+      "evidence_points": [
+        "Imports APIs related to dynamic_load: getprocaddress",
+        "Imports APIs related to process_exec: createprocessa",
+        "Detected suspicious string pattern: url",
+        "Detected suspicious string pattern: ip",
+        "Out-of-distribution sample: embedding distance (1.00) exceeds calibrated threshold (0.40).",
+        "Model static risk score: 100.0% (threshold 50.0%)."
+      ],
+      "scan_duration_ms": 232.24,
+      "warning_message": null
+    },
+    {
+      "file_path": "C:\\CODE\\ThreatWeaver\\.venv\\Lib\\site-packages\\torch\\lib\\torch_cpu.dll",
+      "file_name": "torch_cpu.dll",
+      "file_size_bytes": 305887744,
+      "sha256": "420caca3c1b198126dc74487a5525356c789b473749f5079e8f14c142a3a53da",
+      "verdict": "Unsupported Format",
+      "malware_probability": 0.0,
+      "novelty_score": 0.0,
+      "is_novel": false,
+      "evidence_points": [
+        "Validation detail: File size (305887744 bytes) exceeds limit (104857600 bytes)"
+      ],
+      "scan_duration_ms": 11817.49,
+      "warning_message": "File size (305887744 bytes) exceeds limit (104857600 bytes)"
+    }
+  ]
+}
