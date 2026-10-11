@@ -21,3 +21,14 @@ dataset:
   batch_size: 64
   num_workers: 0  # Safe default on Windows
   seed: 42
+
+# EMBER Benchmark Dataset Settings
+ember:
+  data_dir: "data/ember"
+  raw_feature_dim: 2381
+  schema_mode: "harmonized"      # "harmonized" (256-dim) or "native" (2381-dim)
+  drop_unlabeled: true           # Drop samples where label == -1
+  max_samples_ingest: 10000
+  stream_chunk_size: 1000
+  temporal_split_key: "appeared" # Groups by YYYY-MM
+

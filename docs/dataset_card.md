@@ -25,3 +25,16 @@
 - **Temporal Batching**: Chronological ordering by sample timestamp ($T_1 \dots T_5$).
 - **Look-Ahead Leakage Guarantee**: Samples from past time periods ($T_i$) never observe samples from future time periods ($T_j, j > i$).
 - **Preprocessing Isolation**: Feature normalization scalers (mean and standard deviation) are strictly fitted on training splits only and frozen during inference.
+
+---
+
+## 4. EMBER Integration & Harmonization Pipeline
+
+- **EMBER Specification**: Supports EMBER 2018 and EMBER 2024 raw datasets (2,381 raw dimensions).
+- **Streaming Ingestion**: `EMBERDatasetLoader` processes `train_features.jsonl` chunk-by-chunk without loading multi-gigabyte files into system RAM.
+- **Label Sanitization**: Samples with `label == -1` (unlabeled) are isolated/dropped to ensure supervised ground truth integrity.
+- **Chronological Partitions**: Partitions data chronologically according to the `appeared` month tag (`2018-01` through `2018-12`) to evaluate temporal drift.
+- **Harmonized Projection vs. Native Extractor**:
+  - **Harmonized Mode (256 dims)**: Compresses EMBER's 256 byte histogram into 64 grouped bins and projects section, header, and import features directly into ThreatWeaver's Schema v1.0.
+  - **Native Mode (2,381 dims)**: Preserves the complete 2381-dimensional vector, paired with `EMBERFeatureExtractor` which extracts identical 2381-dim vectors from live `.exe` files on Windows.
+
