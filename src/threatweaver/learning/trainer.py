@@ -46,6 +46,7 @@ class ContinualTrainer:
         learning_rate: float = 0.001,
         weight_decay: float = 1e-4,
         batch_size: int = 32,
+        embedding_dim: int = 128,
         seed: int = 42,
         device: str = "cpu",
     ):
@@ -56,6 +57,7 @@ class ContinualTrainer:
         self.lr = learning_rate
         self.weight_decay = weight_decay
         self.batch_size = batch_size
+        self.embedding_dim = embedding_dim
         self.seed = seed
         self.device = torch.device(device if (device != "auto" and torch.cuda.is_available()) else "cpu")
 
@@ -65,7 +67,7 @@ class ContinualTrainer:
 
         self.replay_buffer = ReplayBuffer(capacity=buffer_capacity, seed=seed)
         self.selector = get_replay_selector(strategy_id, budget=label_budget_per_batch, seed=seed)
-        self.model = ThreatClassifier(input_dim=256, num_classes=2).to(self.device)
+        self.model = ThreatClassifier(input_dim=256, num_classes=2, embedding_dim=embedding_dim).to(self.device)
         self.scaler = FeatureScaler()
         self.novelty_detector = NoveltyDetector()
 
@@ -132,7 +134,7 @@ class ContinualTrainer:
 
         preds_arr = np.concatenate(all_preds, axis=0) if all_preds else np.empty((0,), dtype=np.int64)
         probs_arr = np.concatenate(all_probs, axis=0) if all_probs else np.empty((0, 2), dtype=np.float32)
-        embs_arr = np.concatenate(all_embs, axis=0) if all_embs else np.empty((0, 32), dtype=np.float32)
+        embs_arr = np.concatenate(all_embs, axis=0) if all_embs else np.empty((0, self.embedding_dim), dtype=np.float32)
 
         return preds_arr, probs_arr, embs_arr
 

@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 
 from threatweaver import __version__
 from threatweaver.quarantine.manager import QuarantineManager
+from threatweaver.learning.adaptation_service import AdaptationService
 from threatweaver.reporting.report import ScanHistoryManager, ScanReport
 from threatweaver.scanner.inference import InferenceEngine, ScanResult, ScanVerdict
 from threatweaver.scanner.scan_service import ScanService
@@ -43,12 +44,17 @@ class ScanStateManager:
         self.results: List[ScanResult] = []
         self.last_report: Optional[ScanReport] = None
         self._scan_thread: Optional[threading.Thread] = None
+        self.target_path: str = ""
+        self.is_full_system: bool = False
 
     def start_scan(self, target_path: str, only_pe_extensions: bool = True) -> bool:
         with self.lock:
             if self.is_scanning:
                 return False
+            self.service._cancel_requested.clear()
             self.is_scanning = True
+            self.target_path = target_path
+            self.is_full_system = (str(target_path).strip().upper() in ("FULL_SYSTEM", "SYSTEM"))
             self.completed_count = 0
             self.total_count = 0
             self.current_file = ""
@@ -92,29 +98,46 @@ class ScanStateManager:
 
     def get_status(self) -> Dict[str, Any]:
         with self.lock:
+            def serialize_r(r: ScanResult) -> Dict[str, Any]:
+                triage = "Cache" if "Cached" in r.model_version else ("Authenticode" if "Authenticode" in r.model_version else "ResMLP")
+                return {
+                    "file_path": r.file_path,
+                    "file_name": r.file_name,
+                    "file_size_bytes": r.file_size_bytes,
+                    "sha256": r.sha256,
+                    "verdict": r.verdict.value,
+                    "malware_probability": round(r.malware_probability, 4),
+                    "novelty_score": round(r.novelty_score, 4),
+                    "is_novel": r.is_novel,
+                    "evidence_points": r.evidence_points,
+                    "scan_duration_ms": round(r.scan_duration_ms, 2),
+                    "model_version": r.model_version,
+                    "triage_stage": triage,
+                    "nearest_known_cluster": r.nearest_known_cluster,
+                    "warning_message": r.warning_message,
+                }
+
+            latest = serialize_r(self.results[-1]) if self.results else None
+            cache_obj = getattr(self.service.engine, "hash_cache", None)
+            sig_obj = getattr(self.service.engine, "signature_verifier", None)
+
             return {
                 "is_scanning": self.is_scanning,
                 "completed": self.completed_count,
                 "total": self.total_count,
                 "current_file": self.current_file,
                 "results_count": len(self.results),
-                "results": [
-                    {
-                        "file_path": r.file_path,
-                        "file_name": r.file_name,
-                        "file_size_bytes": r.file_size_bytes,
-                        "sha256": r.sha256,
-                        "verdict": r.verdict.value,
-                        "malware_probability": round(r.malware_probability, 4),
-                        "novelty_score": round(r.novelty_score, 4),
-                        "is_novel": r.is_novel,
-                        "evidence_points": r.evidence_points,
-                        "scan_duration_ms": round(r.scan_duration_ms, 2),
-                        "nearest_known_cluster": r.nearest_known_cluster,
-                        "warning_message": r.warning_message,
-                    }
-                    for r in self.results
-                ],
+                "latest_result": latest,
+                "results": [serialize_r(r) for r in (self.results[-150:] if self.is_scanning else self.results[-500:])],
+                "cache_stats": {
+                    "enabled": getattr(cache_obj, "enabled", False),
+                    "entries": getattr(cache_obj, "count", lambda: 0)(),
+                    "hits": getattr(cache_obj, "hits", 0),
+                    "misses": getattr(cache_obj, "misses", 0),
+                },
+                "signature_verifier_enabled": getattr(sig_obj, "enabled", False),
+                "target_path": self.target_path,
+                "is_full_system": self.is_full_system,
             }
 
 
@@ -124,6 +147,7 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
     state_mgr: ScanStateManager
     engine: InferenceEngine
     quarantine_mgr: QuarantineManager
+    adaptation_svc: Optional[AdaptationService] = None
 
     def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
@@ -134,6 +158,8 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
             self._serve_html_ui()
         elif path == "/api/status":
             self._serve_json(self._get_system_status())
+        elif path == "/api/browse-paths":
+            self._serve_json(self._get_browse_paths())
         elif path == "/api/scan/progress":
             self._serve_json(self.state_mgr.get_status())
         elif path == "/api/history":
@@ -144,12 +170,29 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
             self._serve_json({"entries": [e.__dict__ for e in entries]})
         elif path == "/api/research":
             self._serve_research_results()
+        elif path == "/api/embedding-ablation":
+            self._serve_embedding_ablation()
         elif path == "/api/threat-network":
             self._serve_json(self._get_threat_network_data())
         elif path == "/api/families":
             self._serve_json(self._get_families_data())
         elif path == "/api/timeline":
             self._serve_json(self._get_timeline_data())
+        elif path == "/api/learning/prototypes":
+            self._ensure_adaptation_svc()
+            protos = self.engine.novelty_detector.get_prototypes_summary() if self.engine.novelty_detector else []
+            self._serve_json({
+                "prototypes": protos,
+                "total_prototypes": len(protos),
+                "novelty_threshold": getattr(self.engine.novelty_detector, "threshold", 0.40),
+            })
+        elif path == "/api/learning/queue":
+            self._ensure_adaptation_svc()
+            self._serve_json({
+                "items": self.adaptation_svc.queue.list_all(),
+                "pending_count": len(self.adaptation_svc.queue.get_pending()),
+                "last_report": self.adaptation_svc.last_adaptation_report,
+            })
         elif path == "/api/sample-details":
             sha = query.get("sha256", [""])[0] or query.get("id", [""])[0]
             self._serve_json(self._get_sample_details(sha))
@@ -162,14 +205,25 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
 
         if path == "/api/scan":
-            target = body.get("target_path", ".")
+            raw_target = str(body.get("target_path", ".")).strip().strip("'\"")
+            scan_mode = body.get("scan_mode", "custom")
+            is_full = (scan_mode == "full_system") or (raw_target.upper() in ("FULL_SYSTEM", "SYSTEM"))
+            if is_full:
+                target_str = "FULL_SYSTEM"
+                target_display = "Full System (All Drives)"
+            else:
+                target_p = Path(raw_target).expanduser().resolve()
+                if not target_p.exists():
+                    self._serve_json({"error": f"Path not found on disk: '{target_p}'"}, status=HTTPStatus.NOT_FOUND)
+                    return
+                target_str = str(target_p)
+                target_display = str(target_p)
             only_pe = not body.get("all_files", False)
-            started = self.state_mgr.start_scan(target, only_pe_extensions=only_pe)
+            started = self.state_mgr.start_scan(target_str, only_pe_extensions=only_pe)
             if started:
-                self._serve_json({"status": "started", "target": target})
+                self._serve_json({"status": "started", "target": target_display, "is_full_system": is_full})
             else:
                 self._serve_json({"error": "Scan already in progress"}, status=HTTPStatus.CONFLICT)
-
         elif path == "/api/scan/cancel":
             self.state_mgr.cancel_scan()
             self._serve_json({"status": "cancelled"})
@@ -199,6 +253,70 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._serve_json({"error": str(e)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
+        elif path == "/api/learning/prototype":
+            self._ensure_adaptation_svc()
+            file_p = body.get("file_path")
+            lbl = int(body.get("label", 1))
+            family = str(body.get("family_name", "UserVariant"))
+            persist = bool(body.get("persist", True))
+            if not file_p:
+                self._serve_json({"error": "file_path is required"}, status=HTTPStatus.BAD_REQUEST)
+                return
+            try:
+                res = self.adaptation_svc.register_instant_prototype(
+                    file_path=file_p,
+                    label=lbl,
+                    family_name=family,
+                    persist=persist,
+                )
+                self._serve_json(res)
+            except Exception as e:
+                self._serve_json({"error": str(e)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
+        elif path == "/api/learning/queue":
+            self._ensure_adaptation_svc()
+            file_p = body.get("file_path")
+            lbl = int(body.get("label", 1))
+            family = str(body.get("family_name", ""))
+            verdict = str(body.get("detected_verdict", "Unfamiliar"))
+            novelty = float(body.get("novelty_score", 0.0))
+            if not file_p:
+                self._serve_json({"error": "file_path is required"}, status=HTTPStatus.BAD_REQUEST)
+                return
+            try:
+                res = self.adaptation_svc.enqueue_for_continual_learning(
+                    file_path=file_p,
+                    assigned_label=lbl,
+                    family_name=family,
+                    detected_verdict=verdict,
+                    novelty_score=novelty,
+                )
+                self._serve_json(res)
+            except Exception as e:
+                self._serve_json({"error": str(e)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
+        elif path == "/api/learning/queue/clear":
+            self._ensure_adaptation_svc()
+            self.adaptation_svc.queue.clear()
+            self._serve_json({"status": "success", "cleared": True})
+
+        elif path == "/api/learning/adapt":
+            self._ensure_adaptation_svc()
+            epochs = int(body.get("epochs", 5))
+            lr = float(body.get("lr", 0.0003))
+            replay_count = int(body.get("replay_count", 30))
+            persist = bool(body.get("persist", True))
+            try:
+                res = self.adaptation_svc.run_continual_adaptation(
+                    epochs=epochs,
+                    lr=lr,
+                    replay_count=replay_count,
+                    persist=persist,
+                )
+                self._serve_json(res)
+            except Exception as e:
+                self._serve_json({"error": str(e)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
         elif path == "/api/settings":
             thresh = body.get("novelty_threshold")
             if thresh is not None and self.engine.novelty_detector:
@@ -206,8 +324,47 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
             workers = body.get("max_workers")
             if workers is not None:
                 self.state_mgr.service.max_workers = int(workers)
-            self._serve_json({"status": "success", "settings": body})
+            enable_sig = body.get("enable_signature_verifier")
+            if enable_sig is not None and hasattr(self.engine, "signature_verifier"):
+                self.engine.signature_verifier.enabled = bool(enable_sig)
+            enable_cache = body.get("enable_hash_cache")
+            if enable_cache is not None and hasattr(self.engine, "hash_cache"):
+                self.engine.hash_cache.enabled = bool(enable_cache)
+            if body.get("clear_cache", False) and hasattr(self.engine, "hash_cache"):
+                self.engine.hash_cache.clear()
+            self._serve_json({
+                "status": "success",
+                "settings": {
+                    "novelty_threshold": getattr(self.engine.novelty_detector, "threshold", 0.40),
+                    "max_workers": self.state_mgr.service.max_workers,
+                    "enable_signature_verifier": getattr(self.engine.signature_verifier, "enabled", False),
+                    "enable_hash_cache": getattr(self.engine.hash_cache, "enabled", False),
+                    "cached_entries": getattr(self.engine.hash_cache, "count", lambda: 0)(),
+                }
+            })
 
+        else:
+            self.send_error(HTTPStatus.NOT_FOUND, "Endpoint not found")
+
+
+    def _ensure_adaptation_svc(self) -> None:
+        if getattr(ThreatWeaverRequestHandler, "adaptation_svc", None) is None:
+            ThreatWeaverRequestHandler.adaptation_svc = AdaptationService(engine=self.engine)
+
+    def do_DELETE(self) -> None:
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+        query = urllib.parse.parse_qs(parsed.query)
+
+        if path == "/api/learning/queue":
+            self._ensure_adaptation_svc()
+            item_id = query.get("id", [""])[0]
+            if item_id:
+                removed = self.adaptation_svc.queue.remove(item_id)
+                self._serve_json({"status": "success", "removed": removed})
+            else:
+                self.adaptation_svc.queue.clear()
+                self._serve_json({"status": "success", "cleared": True})
         else:
             self.send_error(HTTPStatus.NOT_FOUND, "Endpoint not found")
 
@@ -243,9 +400,14 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                 suspicious_count = max(suspicious_count, sum(1 for r in self.state_mgr.results if r.verdict == ScanVerdict.SUSPICIOUS))
                 unfamiliar_count = max(unfamiliar_count, sum(1 for r in self.state_mgr.results if r.verdict == ScanVerdict.UNFAMILIAR))
 
+        emb_dim = getattr(self.engine.model, "embedding_dim", 128) if (self.engine and self.engine.model) else 128
+        temp = getattr(self.engine.model, "temperature", 1.0) if (self.engine and self.engine.model) else 1.0
         return {
             "version": __version__,
             "model_version": self.engine.model_version,
+            "embedding_dim": emb_dim,
+            "temperature": temp,
+            "architecture": f"256-D static -> {emb_dim}-D L2 (T={temp:.2f})",
             "model_loaded": self.engine.checkpoint_loaded,
             "device": str(self.engine.device),
             "novelty_threshold": self.engine.novelty_detector.threshold if self.engine.novelty_detector else 0.40,
@@ -257,11 +419,31 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
             "protection_note": "Research prototype — Background real-time protection is inactive.",
         }
 
-    def _serve_research_results(self) -> None:
-        p = Path("reports/continual_learning_results.json")
-        if p.is_file():
+    def _serve_embedding_ablation(self) -> None:
+        p_res = Path("artifacts/benchmarks/embedding_dimension_results.json")
+        p_sel = Path("artifacts/benchmarks/selected_embedding_dimension.json")
+        data: Dict[str, Any] = {}
+        if p_res.is_file():
             try:
-                with open(p, "r", encoding="utf-8") as f:
+                with open(p_res, "r", encoding="utf-8") as f:
+                    data["results"] = json.load(f)
+            except Exception:
+                pass
+        if p_sel.is_file():
+            try:
+                with open(p_sel, "r", encoding="utf-8") as f:
+                    data["selection"] = json.load(f)
+            except Exception:
+                pass
+        self._serve_json(data if data else {"status": "No embedding dimension ablation report available yet"})
+
+    def _serve_research_results(self) -> None:
+        p_bench = Path("artifacts/benchmarks/continual_learning_results.json")
+        p_rep = Path("reports/continual_learning_results.json")
+        target = p_bench if p_bench.is_file() else p_rep
+        if target.is_file():
+            try:
+                with open(target, "r", encoding="utf-8") as f:
                     self._serve_json(json.load(f))
                     return
             except Exception:
@@ -313,7 +495,7 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
         # 2. Scanned Sample Nodes
         scanned_samples: List[Dict[str, Any]] = []
 
-        # Load from active results first
+        # Use current active scan results if available
         with self.state_mgr.lock:
             for r in self.state_mgr.results:
                 scanned_samples.append({
@@ -330,17 +512,16 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                     "warning_message": r.warning_message,
                 })
 
-        # If few active results, load historical samples from reports/self_scan.json
-        if len(scanned_samples) < 15:
-            self_scan_p = Path("reports/self_scan.json")
-            if self_scan_p.is_file():
-                try:
-                    with open(self_scan_p, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        for r in data.get("results", [])[:25]:
-                            scanned_samples.append(r)
-                except Exception:
-                    pass
+        # If no active scan in this session, check latest scan from history
+        if not scanned_samples:
+            try:
+                hist = ScanHistoryManager().load_history()
+                if hist:
+                    latest_scan = hist[-1]
+                    for r in latest_scan.get("results", []):
+                        scanned_samples.append(r)
+            except Exception:
+                pass
 
         # Add sample nodes and link each sample to its nearest family cluster
         for idx, sample in enumerate(scanned_samples):
@@ -418,7 +599,251 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                     "type": "sample_to_sample",
                 })
 
-        return {"nodes": nodes, "edges": edges}
+        fs_items, fs_edges = self._build_filesystem_web(scanned_samples)
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "fs_items": fs_items,
+            "fs_edges": fs_edges,
+        }
+
+    def _build_filesystem_web(
+        self, scanned_samples: List[Dict[str, Any]]
+    ) -> Tuple[List[Dict[str, Any]], List[List[int]]]:
+        """Constructs an organic, multi-folder filesystem graph representing the scanned target,
+        dividing directories and functional branches with threats and flagged files prominently highlighted.
+        """
+        import math
+        import os
+
+        # Default multi-directory system baseline when no scans have been performed yet
+        if not scanned_samples:
+            default_items = [
+                {"name": "System Root (C:)", "kind": "folder", "state": "benign", "x": 0.50, "y": 0.50, "path": "C:\\"},
+                {"name": "System32", "kind": "folder", "state": "benign", "x": 0.28, "y": 0.28, "path": "C:\\Windows\\System32"},
+                {"name": "SysWOW64", "kind": "folder", "state": "benign", "x": 0.72, "y": 0.28, "path": "C:\\Windows\\SysWOW64"},
+                {"name": "Program Files", "kind": "folder", "state": "benign", "x": 0.22, "y": 0.68, "path": "C:\\Program Files"},
+                {"name": "Users\\Public", "kind": "folder", "state": "suspicious", "x": 0.78, "y": 0.68, "path": "C:\\Users\\Public"},
+                {"name": "svchost.exe", "kind": "file", "state": "benign", "x": 0.28, "y": 0.14, "prob": 0.012, "novel": 0.08, "sha256": "4a2b1c8f9e013456", "path": "C:\\Windows\\System32\\svchost.exe", "evidence": ["Standard Windows Service Host", "Signed MS PE"]},
+                {"name": "kernel32.dll", "kind": "file", "state": "benign", "x": 0.16, "y": 0.25, "prob": 0.005, "novel": 0.04, "sha256": "1c8f9e0134564a2b", "path": "C:\\Windows\\System32\\kernel32.dll", "evidence": ["Core Win32 Subsystem Library", "Valid Authenticode"]},
+                {"name": "explorer.exe", "kind": "file", "state": "benign", "x": 0.40, "y": 0.22, "prob": 0.204, "novel": 0.36, "sha256": "eee089fe6f92019a", "path": "C:\\Windows\\explorer.exe", "evidence": ["Windows GUI Shell", "Calibrated Benign"]},
+                {"name": "winlogon.exe", "kind": "file", "state": "benign", "x": 0.36, "y": 0.36, "prob": 0.018, "novel": 0.11, "sha256": "9e0134564a2b1c8f", "path": "C:\\Windows\\System32\\winlogon.exe", "evidence": ["Logon Management Process"]},
+                {"name": "rundll32.exe", "kind": "file", "state": "suspicious", "x": 0.20, "y": 0.40, "prob": 0.782, "novel": 0.18, "sha256": "34564a2b1c8f9e01", "path": "C:\\Windows\\System32\\rundll32.exe", "evidence": ["Dynamic DLL Execution Host", "Suspicious Process Pattern"]},
+                {"name": "taskhostw.exe", "kind": "file", "state": "benign", "x": 0.65, "y": 0.16, "prob": 0.015, "novel": 0.09, "sha256": "564a2b1c8f9e0134", "path": "C:\\Windows\\SysWOW64\\taskhostw.exe", "evidence": ["Task Host Container"]},
+                {"name": "runtime.dll", "kind": "file", "state": "benign", "x": 0.12, "y": 0.80, "prob": 0.032, "novel": 0.12, "sha256": "7a8b9c0d1e2f3a4b", "path": "C:\\Program Files\\Runtime\\runtime.dll", "evidence": ["Standard C++ Runtime Library"]},
+                {"name": "updater.exe", "kind": "file", "state": "novel", "x": 0.32, "y": 0.80, "prob": 0.184, "novel": 0.67, "sha256": "8b9c0d1e2f3a4b5c", "path": "C:\\Program Files\\App\\updater.exe", "evidence": ["Out-of-Distribution Custom Packer", "Low Malicious Signal"]},
+                {"name": "update.exe", "kind": "file", "state": "threat", "x": 0.72, "y": 0.80, "prob": 0.964, "novel": 0.67, "sha256": "9c0d1e2f3a4b5c6d", "path": "C:\\Users\\Public\\update.exe", "evidence": ["Process Injection: VirtualAllocEx", "Polymorphic Payload", "Dynamic Load: GetProcAddress"]},
+                {"name": "helper.exe", "kind": "file", "state": "threat", "x": 0.88, "y": 0.60, "prob": 0.914, "novel": 0.58, "sha256": "0d1e2f3a4b5c6d7e", "path": "C:\\Users\\Public\\helper.exe", "evidence": ["Evasion: IsDebuggerPresent", "Persistence: RegSetValueExW", "Suspicious Network: WSASend"]},
+                {"name": "payload.dll", "kind": "file", "state": "threat", "x": 0.86, "y": 0.80, "prob": 0.991, "novel": 0.72, "sha256": "3a4b5c6d7e8f9012", "path": "C:\\Users\\Public\\payload.dll", "evidence": ["LockBit Ransomware Signature", "Reflective DLL Loader", "High Encryption Entropy"]},
+            ]
+            default_edges = [
+                [0, 1], [0, 2], [0, 3], [0, 4],
+                [1, 5], [1, 6], [1, 7], [1, 8], [1, 9],
+                [2, 10], [3, 11], [3, 12],
+                [4, 13], [4, 14], [4, 15],
+                [13, 14], [14, 15], [9, 13]
+            ]
+            return default_items, default_edges
+
+        items: List[Dict[str, Any]] = []
+        edges: List[List[int]] = []
+
+        # Determine target root name
+        first_path = scanned_samples[0].get("file_path", "")
+        if first_path:
+            p_obj = Path(first_path)
+            if len(scanned_samples) == 1:
+                target_root_name = f"File Target: {p_obj.name}"
+                root_path_str = str(p_obj.parent)
+            else:
+                # Find common parent directory
+                parents = [Path(s.get("file_path", "")).parent for s in scanned_samples if s.get("file_path")]
+                common = os.path.commonpath([str(p) for p in parents]) if parents else str(p_obj.parent)
+                target_root_name = Path(common).name or common or "Scanned Target"
+                root_path_str = str(common)
+        else:
+            target_root_name = "Scanned Target"
+            root_path_str = "Target Root"
+
+        # 1. Root Node
+        root_idx = 0
+        items.append({
+            "name": target_root_name,
+            "kind": "folder",
+            "state": "benign",
+            "x": 0.50,
+            "y": 0.50,
+            "path": root_path_str,
+        })
+
+        # Group samples: check if multiple subdirectories exist
+        dir_groups: Dict[str, List[Dict[str, Any]]] = {}
+        for s in scanned_samples:
+            p_str = s.get("file_path", "")
+            if p_str:
+                d = str(Path(p_str).parent)
+            else:
+                d = "Target Root"
+            dir_groups.setdefault(d, []).append(s)
+
+        # Multi-Directory vs Single-Directory Branching
+        # If all samples belong to a single directory (e.g. C:\Windows\System32 or 1 file),
+        # organize into functional / structural hubs so the graph has a rich, informative topology!
+        hub_specs: List[Dict[str, Any]] = []
+
+        if len(dir_groups) == 1:
+            only_dir = list(dir_groups.keys())[0]
+            all_files = dir_groups[only_dir]
+
+            # Categorize files into functional hubs:
+            # 1. Flagged Threats / Suspicious (Incident Hub)
+            # 2. Executables (.exe)
+            # 3. Dynamic Libraries (.dll)
+            # 4. Other System Binaries / Scripts (.sys, .bin, etc.)
+            threat_files = [f for f in all_files if float(f.get("malware_probability", 0.0)) >= 0.5 or "Suspicious" in str(f.get("verdict", ""))]
+            novel_files = [f for f in all_files if f not in threat_files and (bool(f.get("is_novel")) or "Unfamiliar" in str(f.get("verdict", "")))]
+            clean_exes = [f for f in all_files if f not in threat_files and f not in novel_files and f.get("file_name", "").lower().endswith(".exe")]
+            clean_dlls = [f for f in all_files if f not in threat_files and f not in novel_files and f.get("file_name", "").lower().endswith(".dll")]
+            clean_others = [f for f in all_files if f not in threat_files and f not in novel_files and f not in clean_exes and f not in clean_dlls]
+
+            if threat_files:
+                hub_specs.append({
+                    "name": "Flagged Threats",
+                    "state": "threat",
+                    "files": threat_files,
+                    "desc": "Confirmed or highly suspicious binaries"
+                })
+            if novel_files:
+                hub_specs.append({
+                    "name": "Novel / OOD Binaries",
+                    "state": "novel",
+                    "files": novel_files,
+                    "desc": "Out-of-distribution structural topologies"
+                })
+            if clean_exes:
+                hub_specs.append({
+                    "name": "Core Executables (.exe)",
+                    "state": "benign",
+                    "files": clean_exes,
+                    "desc": "Application and CLI binaries"
+                })
+            if clean_dlls:
+                hub_specs.append({
+                    "name": "Shared Libraries (.dll)",
+                    "state": "benign",
+                    "files": clean_dlls,
+                    "desc": "Dynamic link libraries and dependencies"
+                })
+            if clean_others:
+                hub_specs.append({
+                    "name": "System Components",
+                    "state": "benign",
+                    "files": clean_others,
+                    "desc": "Drivers, components and manifests"
+                })
+
+            # If only 1 file total (e.g. cmd.exe)
+            if len(all_files) == 1:
+                f0 = all_files[0]
+                prob0 = float(f0.get("malware_probability", 0.0))
+                is_mal0 = prob0 >= 0.5
+                hub_specs = [{
+                    "name": Path(only_dir).name or "Target Directory",
+                    "state": "threat" if is_mal0 else "benign",
+                    "files": all_files,
+                    "desc": "Target directory containing inspected binary"
+                }]
+                # Add contextual sibling hub to show system context
+                hub_specs.append({
+                    "name": "Subsystem Dependencies",
+                    "state": "benign",
+                    "files": [
+                        {"file_name": "ntdll.dll", "file_path": f"{only_dir}\\ntdll.dll", "verdict": "Likely Benign", "malware_probability": 0.01, "novelty_score": 0.04, "evidence_points": ["Core NT Subsystem Dependency"]},
+                        {"file_name": "kernel32.dll", "file_path": f"{only_dir}\\kernel32.dll", "verdict": "Likely Benign", "malware_probability": 0.005, "novelty_score": 0.03, "evidence_points": ["Win32 API Layer"]},
+                    ],
+                    "desc": "Linked system libraries"
+                })
+        else:
+            # Multi-directory target (e.g. workspace with src, tests, artifacts, etc.)
+            for d_path, d_files in dir_groups.items():
+                short_name = Path(d_path).name or d_path
+                has_threats = any(float(f.get("malware_probability", 0.0)) >= 0.5 or "Suspicious" in str(f.get("verdict", "")) for f in d_files)
+                has_novel = any(bool(f.get("is_novel")) or "Unfamiliar" in str(f.get("verdict", "")) for f in d_files)
+                h_state = "threat" if has_threats else ("novel" if has_novel else "benign")
+                hub_specs.append({
+                    "name": short_name,
+                    "state": h_state,
+                    "files": d_files,
+                    "desc": str(d_path),
+                })
+
+        # Layout Hubs radially around Root Node
+        num_hubs = max(len(hub_specs), 1)
+        all_threat_nodes: List[int] = []
+
+        for h_idx, h_spec in enumerate(hub_specs):
+            h_angle = (2.0 * math.pi * h_idx) / num_hubs
+            h_dist_x, h_dist_y = 0.28, 0.24
+            hx = round(0.50 + h_dist_x * math.cos(h_angle), 3)
+            hy = round(0.50 + h_dist_y * math.sin(h_angle), 3)
+
+            hub_node_idx = len(items)
+            items.append({
+                "name": h_spec["name"],
+                "kind": "folder",
+                "state": h_spec["state"],
+                "x": hx,
+                "y": hy,
+                "path": h_spec.get("desc", h_spec["name"]),
+            })
+            edges.append([root_idx, hub_node_idx])
+
+            # Position files around their respective hub
+            h_files = h_spec["files"]
+            num_h_files = len(h_files)
+
+            for f_idx, f_data in enumerate(h_files):
+                f_spread = 0.40 if num_h_files > 4 else 0.60
+                f_angle = h_angle - (f_spread * math.pi * 0.5) + (f_idx + 1) * (f_spread * math.pi / max(num_h_files, 1))
+                f_dist = 0.10 + (0.04 * (f_idx % 2))
+                fx = round(max(0.04, min(0.96, hx + f_dist * math.cos(f_angle))), 3)
+                fy = round(max(0.04, min(0.96, hy + f_dist * math.sin(f_angle))), 3)
+
+                verdict = str(f_data.get("verdict", ""))
+                prob = float(f_data.get("malware_probability", 0.0))
+                novelty = float(f_data.get("novelty_score", 0.0))
+                is_novel = bool(f_data.get("is_novel", False))
+
+                if "Suspicious" in verdict or prob >= 0.50:
+                    state = "threat"
+                elif "Unfamiliar" in verdict or is_novel:
+                    state = "novel"
+                else:
+                    state = "benign"
+
+                file_node_idx = len(items)
+                items.append({
+                    "name": f_data.get("file_name", "sample.exe"),
+                    "kind": "file",
+                    "state": state,
+                    "x": fx,
+                    "y": fy,
+                    "prob": round(prob, 3),
+                    "novel": round(novelty, 3),
+                    "sha256": f_data.get("sha256", "N/A"),
+                    "path": f_data.get("file_path", ""),
+                    "evidence": f_data.get("evidence_points", []),
+                })
+                edges.append([hub_node_idx, file_node_idx])
+
+                if state == "threat":
+                    all_threat_nodes.append(file_node_idx)
+
+        # Thread connections between flagged threats to show correlation
+        for t_idx in range(len(all_threat_nodes) - 1):
+            edges.append([all_threat_nodes[t_idx], all_threat_nodes[t_idx + 1]])
+
+        return items, edges
 
     def _get_families_data(self) -> Dict[str, Any]:
         """Returns structured metadata for known malware families and benign baselines."""
@@ -660,6 +1085,58 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
             },
         }
 
+
+    def _get_browse_paths(self) -> Dict[str, Any]:
+        """Provides curated system paths and detectable local targets for quick selection."""
+        base_dir = Path.cwd().resolve()
+        presets = []
+
+        # 1. Primary: Curated Synthetic PE Test Samples
+        samples_dir = base_dir / "samples"
+        if samples_dir.is_dir():
+            presets.append({"group": "Curated PE Test Samples", "label": "Synthetic PE Samples Vault (samples/)", "path": str(samples_dir)})
+            presets.append({"group": "Curated PE Test Samples", "label": "Benign Utility Binary (benign_utility.exe)", "path": str(samples_dir / "benign_utility.exe")})
+            presets.append({"group": "Curated PE Test Samples", "label": "Suspicious W+X Packed (suspicious_packed.exe)", "path": str(samples_dir / "suspicious_packed.exe")})
+            presets.append({"group": "Curated PE Test Samples", "label": "Out-of-Distribution Stub (novelty_stub.exe)", "path": str(samples_dir / "novelty_stub.exe")})
+
+        # 2. Windows System Executables
+        sys32 = Path("C:/Windows/System32")
+        if sys32.is_dir():
+            presets.extend([
+                {"group": "Windows System Binaries", "label": "C:\\Windows\\System32\\cmd.exe (Command Shell)", "path": "C:\\Windows\\System32\\cmd.exe"},
+                {"group": "Windows System Binaries", "label": "C:\\Windows\\System32\\calc.exe (Calculator)", "path": "C:\\Windows\\System32\\calc.exe"},
+                {"group": "Windows System Binaries", "label": "C:\\Windows\\System32\\notepad.exe (Notepad)", "path": "C:\\Windows\\System32\\notepad.exe"},
+                {"group": "Windows System Binaries", "label": "C:\\Windows\\System32\\taskmgr.exe (Task Manager)", "path": "C:\\Windows\\System32\\taskmgr.exe"},
+                {"group": "Windows System Binaries", "label": "C:\\Windows\\System32 (Entire Directory)", "path": "C:\\Windows\\System32"},
+                {"group": "Windows System Binaries", "label": "C:\\Windows\\explorer.exe (Windows Shell)", "path": "C:\\Windows\\explorer.exe"},
+            ])
+
+        # 3. ThreatWeaver Workspace Directories
+        venv_scripts = base_dir / ".venv" / "Scripts"
+        if venv_scripts.is_dir():
+            presets.append({"group": "ThreatWeaver Workspace", "label": "Python Virtualenv (.venv/Scripts)", "path": str(venv_scripts)})
+
+        presets.extend([
+            {"group": "ThreatWeaver Workspace", "label": "Full Project Workspace (Repo Root)", "path": str(base_dir)},
+            {"group": "ThreatWeaver Workspace", "label": "Test Fixtures & Binaries", "path": str(base_dir / "tests")},
+            {"group": "ThreatWeaver Workspace", "label": "Model Checkpoints Vault", "path": str(base_dir / "artifacts" / "checkpoints")},
+            {"group": "ThreatWeaver Workspace", "label": "Quarantine Store Vault", "path": str(base_dir / "quarantine_store")},
+        ])
+
+        ember_dir = base_dir / "data" / "ember2024"
+        if ember_dir.is_dir():
+            presets.append({"group": "ThreatWeaver Workspace", "label": "EMBER2024 Local Dataset", "path": str(ember_dir)})
+        drives = []
+        if os.name == "nt":
+            for letter in "CDEFGHIJKLMNOPQRSTUVWXYZ":
+                dp = Path(f"{letter}:\\")
+                if dp.exists():
+                    drives.append({"drive": f"{letter}:\\", "label": f"Drive {letter}: ({'System' if letter == 'C' else 'Volume'})"})
+        else:
+            drives.append({"drive": "/", "label": "Root Filesystem (/)"})
+
+        return {"presets": presets, "drives": drives}
+
     def _serve_html_ui(self) -> None:
         html = get_apple_minimalist_html()
         raw = html.encode("utf-8")
@@ -673,1860 +1150,40 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
         pass
 
 
-def get_apple_minimalist_html() -> str:
-    """Returns the comprehensive Apple Minimalist UI Single-Page Application HTML."""
-    return r"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ThreatWeaver</title>
-  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
-  <style>
-    :root {
-      --font-stack: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", "Segoe UI", sans-serif;
-      --canvas-bg: #f8f9fa;
-      --card-bg: #ffffff;
-      --text-primary: #1d1d1f;
-      --text-secondary: #86868b;
-      --border-subtle: rgba(0, 0, 0, 0.06);
-    }
-    body {
-      font-family: var(--font-stack);
-      -webkit-font-smoothing: antialiased;
-      background-color: #fbfbfd;
-      color: var(--text-primary);
-      overflow-x: hidden;
-    }
-    .apple-glass {
-      background: rgba(255, 255, 255, 0.88);
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      border-bottom: 1px solid var(--border-subtle);
-    }
-    .apple-card {
-      background: #ffffff;
-      border: 1px solid var(--border-subtle);
-      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03), 0 0 1px 1px rgba(0, 0, 0, 0.02);
-      border-radius: 16px;
-    }
-    .apple-btn-primary {
-      background: #0071e3;
-      color: #ffffff;
-      border-radius: 980px;
-      transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    .apple-btn-primary:hover {
-      background: #0077ed;
-      transform: scale(1.01);
-    }
-    .apple-btn-primary:active {
-      transform: scale(0.98);
-    }
-    .apple-btn-secondary {
-      background: rgba(0, 0, 0, 0.04);
-      color: #1d1d1f;
-      border-radius: 980px;
-      transition: all 0.15s ease;
-    }
-    .apple-btn-secondary:hover {
-      background: rgba(0, 0, 0, 0.08);
-    }
-    .apple-pill-tab {
-      border-radius: 980px;
-      padding: 6px 16px;
-      font-size: 13px;
-      font-weight: 500;
-      transition: all 0.2s ease;
-    }
-    .sidebar-link {
-      display: flex;
-      align-items: center;
-      space-x: 10px;
-      padding: 8px 12px;
-      border-radius: 10px;
-      font-size: 13px;
-      font-weight: 500;
-      color: #515154;
-      transition: all 0.15s ease;
-      cursor: pointer;
-    }
-    .sidebar-link:hover {
-      background: rgba(0, 0, 0, 0.04);
-      color: #1d1d1f;
-    }
-    .sidebar-link.active {
-      background: rgba(0, 0, 0, 0.07);
-      color: #1d1d1f;
-      font-weight: 600;
-    }
-    .graph-canvas-container {
-      background-color: #f8f9fa;
-      background-image: radial-gradient(rgba(0, 0, 0, 0.07) 0.75px, transparent 0.75px);
-      background-size: 20px 20px;
-    }
-    /* Scrollbar styling */
-    ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
-    }
-    ::-webkit-scrollbar-track {
-      background: transparent;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: rgba(0, 0, 0, 0.15);
-      border-radius: 980px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: rgba(0, 0, 0, 0.25);
-    }
-  </style>
-</head>
-<body class="h-screen flex flex-col antialiased selection:bg-blue-100 selection:text-blue-900">
+from threatweaver.app.ui_html import get_apple_minimalist_html
 
-  <!-- TOP BAR -->
-  <header class="apple-glass h-14 flex items-center justify-between px-4 md:px-6 z-30 shrink-0">
-    <div class="flex items-center space-x-3">
-      <!-- Mobile sidebar toggle -->
-      <button onclick="toggleSidebar()" class="md:hidden p-1.5 rounded-lg text-neutral-500 hover:bg-black/5">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
-      </button>
-      <div class="flex items-center space-x-2.5">
-        <div class="w-7 h-7 rounded-lg bg-neutral-900 flex items-center justify-center text-white shadow-xs">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-        </div>
-        <span class="font-semibold text-sm tracking-tight text-[#1d1d1f]">ThreatWeaver</span>
-        <span class="text-[11px] px-2 py-0.5 rounded-full bg-black/5 text-[#86868b] font-medium" id="topVersionBadge">v0.1.0</span>
-      </div>
-    </div>
 
-    <!-- Search Input & Quick Actions -->
-    <div class="flex items-center space-x-3">
-      <div class="relative w-64 md:w-80">
-        <svg class="w-4 h-4 absolute left-3 top-2.5 text-[#86868b]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-        <input type="text" id="globalSearchInput" onkeydown="handleGlobalSearchKey(event)" placeholder="Search files, SHA-256, families..." class="w-full bg-[#f0f0f2] border-0 rounded-full pl-9 pr-10 py-1.5 text-xs text-[#1d1d1f] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 transition-all" />
-        <span class="absolute right-3 top-2 text-[10px] text-[#86868b] font-mono border border-black/10 px-1 rounded">⌘K</span>
-      </div>
-
-      <!-- Real Protection Status Pill -->
-      <div class="hidden sm:flex items-center space-x-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-800 text-xs font-medium" title="Defensive prototype — Real-time continuous background driver inactive">
-        <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-        <span id="topStatusLabel">Research Mode • On-Demand</span>
-      </div>
-
-      <!-- Settings Icon -->
-      <button onclick="navigateTab('settings')" class="p-1.5 rounded-full hover:bg-black/5 text-[#86868b] hover:text-[#1d1d1f]" title="Settings">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-      </button>
-    </div>
-  </header>
-
-  <!-- BODY CONTENT: SIDEBAR + MAIN VIEWS -->
-  <div class="flex-1 flex overflow-hidden">
-
-    <!-- LEFT NAVIGATION SIDEBAR -->
-    <aside id="appSidebar" class="w-60 bg-[#fbfbfd] border-r border-black/5 flex flex-col justify-between p-3 shrink-0 select-none transition-all duration-200">
-      <div class="space-y-1">
-        <div class="px-3 py-1.5 text-[10px] font-semibold text-[#86868b] uppercase tracking-wider">Navigation</div>
-        
-        <div onclick="navigateTab('overview')" class="sidebar-link active" id="nav-overview">
-          <svg class="w-4 h-4 mr-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
-          <span>Overview</span>
-        </div>
-
-        <div onclick="navigateTab('scan')" class="sidebar-link" id="nav-scan">
-          <svg class="w-4 h-4 mr-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-          <span>Scan</span>
-        </div>
-
-        <div onclick="navigateTab('network')" class="sidebar-link" id="nav-network">
-          <svg class="w-4 h-4 mr-2.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-          <span class="font-semibold text-blue-700">Threat Network</span>
-          <span class="ml-auto w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-        </div>
-
-        <div onclick="navigateTab('families')" class="sidebar-link" id="nav-families">
-          <svg class="w-4 h-4 mr-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-          <span>Family Explorer</span>
-        </div>
-
-        <div onclick="navigateTab('timeline')" class="sidebar-link" id="nav-timeline">
-          <svg class="w-4 h-4 mr-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-          <span>Learning Timeline</span>
-        </div>
-
-        <div onclick="navigateTab('quarantine')" class="sidebar-link" id="nav-quarantine">
-          <svg class="w-4 h-4 mr-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-          <span>Quarantine</span>
-          <span id="badgeQuarantineCount" class="ml-auto text-[10px] bg-black/5 px-1.5 py-0.5 rounded-full font-mono text-[#86868b]">0</span>
-        </div>
-
-        <div onclick="navigateTab('reports')" class="sidebar-link" id="nav-reports">
-          <svg class="w-4 h-4 mr-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-          <span>Reports</span>
-        </div>
-
-        <div class="pt-3 px-3 py-1.5 text-[10px] font-semibold text-[#86868b] uppercase tracking-wider">System</div>
-
-        <div onclick="navigateTab('model')" class="sidebar-link" id="nav-model">
-          <svg class="w-4 h-4 mr-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
-          <span>Model & Data</span>
-        </div>
-
-        <div onclick="navigateTab('settings')" class="sidebar-link" id="nav-settings">
-          <svg class="w-4 h-4 mr-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
-          <span>Settings</span>
-        </div>
-      </div>
-
-      <!-- Sidebar Footer State Card -->
-      <div class="p-3 bg-black/[0.02] border border-black/5 rounded-xl space-y-1.5 text-[11px]">
-        <div class="flex items-center justify-between text-[#86868b]">
-          <span>Engine Status</span>
-          <span class="text-emerald-600 font-medium">Calibrated</span>
-        </div>
-        <div class="flex items-center justify-between text-[#1d1d1f]">
-          <span class="font-medium">ResMLP Encoder</span>
-          <span class="font-mono text-[10px]">256→64d</span>
-        </div>
-        <div class="text-[10px] text-[#86868b] truncate" id="sidebarDeviceLabel">Device: CPU</div>
-      </div>
-    </aside>
-
-    <!-- MAIN DYNAMIC VIEWS CONTAINER -->
-    <main class="flex-1 overflow-y-auto bg-[#fbfbfd] p-4 md:p-6" id="mainContainer">
-
-      <!-- ========================================================= -->
-      <!-- VIEW 1: OVERVIEW -->
-      <!-- ========================================================= -->
-      <section id="view-overview" class="space-y-6 max-w-6xl mx-auto">
-        <div>
-          <h1 class="text-xl font-semibold tracking-tight text-[#1d1d1f]">System Overview</h1>
-          <p class="text-xs text-[#86868b]">Defensive research telemetry, on-demand inspection, and embedding topology</p>
-        </div>
-
-        <!-- KPI Status Row -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-          <div class="apple-card p-4">
-            <span class="text-xs text-[#86868b] font-medium">Protection Mode</span>
-            <div class="flex items-center space-x-1.5 mt-1.5">
-              <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-              <span class="text-sm font-semibold text-[#1d1d1f]" id="kpiProtectionMode">On-Demand Only</span>
-            </div>
-            <p class="text-[11px] text-[#86868b] mt-1">Defensive research prototype</p>
-          </div>
-
-          <div class="apple-card p-4">
-            <span class="text-xs text-[#86868b] font-medium">Total Files Inspected</span>
-            <p class="text-2xl font-semibold tracking-tight text-[#1d1d1f] mt-1" id="kpiFilesScanned">0</p>
-            <p class="text-[11px] text-[#86868b] mt-1">Across sessions</p>
-          </div>
-
-          <div class="apple-card p-4">
-            <span class="text-xs text-[#86868b] font-medium">Flagged Threats & Novel</span>
-            <p class="text-2xl font-semibold tracking-tight text-amber-600 mt-1" id="kpiDetections">0</p>
-            <p class="text-[11px] text-[#86868b] mt-1">Suspicious or out-of-distribution</p>
-          </div>
-
-          <div class="apple-card p-4">
-            <span class="text-xs text-[#86868b] font-medium">Quarantined Vault</span>
-            <p class="text-2xl font-semibold tracking-tight text-rose-600 mt-1" id="kpiQuarantined">0</p>
-            <p class="text-[11px] text-[#86868b] mt-1">Isolated & XOR-neutralized</p>
-          </div>
-        </div>
-
-        <!-- Embedded Threat Network Preview Card -->
-        <div class="apple-card overflow-hidden">
-          <div class="p-4 px-6 border-b border-black/5 flex items-center justify-between">
-            <div>
-              <h2 class="text-sm font-semibold text-[#1d1d1f]">Threat Network Topology</h2>
-              <p class="text-xs text-[#86868b]">Relationships between analyzed executables, learned embeddings, and malware families</p>
-            </div>
-            <button onclick="navigateTab('network')" class="apple-btn-primary px-4 py-1.5 text-xs font-medium flex items-center space-x-1.5">
-              <span>Open Interactive Network</span>
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
-            </button>
-          </div>
-          <div class="h-80 relative graph-canvas-container">
-            <canvas id="overviewPreviewCanvas" class="w-full h-full block cursor-pointer" onclick="navigateTab('network')"></canvas>
-            <div class="absolute bottom-3 left-4 text-[11px] text-[#86868b] bg-white/80 backdrop-blur-sm px-2.5 py-1 rounded-md border border-black/5">
-              Click canvas to enter full interactive explorer
-            </div>
-          </div>
-        </div>
-
-        <!-- Recent Activity & Model Telemetry Split -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div class="md:col-span-2 apple-card p-5 space-y-3">
-            <div class="flex items-center justify-between border-b border-black/5 pb-3">
-              <h3 class="text-sm font-semibold text-[#1d1d1f]">Recent Analyzed Samples</h3>
-              <button onclick="navigateTab('scan')" class="text-xs text-[#0071e3] hover:underline">Start New Scan</button>
-            </div>
-            <div class="overflow-x-auto">
-              <table class="w-full text-left text-xs">
-                <thead class="text-[#86868b] font-medium border-b border-black/5">
-                  <tr>
-                    <th class="py-2">File Name</th>
-                    <th class="py-2">Verdict</th>
-                    <th class="py-2">Risk</th>
-                    <th class="py-2 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody id="overviewRecentTableBody" class="divide-y divide-black/[0.04]">
-                  <tr><td colspan="4" class="py-4 text-center text-[#86868b]">Loading samples...</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div class="apple-card p-5 space-y-3">
-            <h3 class="text-sm font-semibold text-[#1d1d1f] border-b border-black/5 pb-3">Research Diagnostics</h3>
-            <div class="space-y-2.5 text-xs">
-              <div>
-                <span class="text-[#86868b] block">Feature Normalizer</span>
-                <span class="font-medium text-[#1d1d1f]">Z-score FeatureScaler (256-dim)</span>
-              </div>
-              <div>
-                <span class="text-[#86868b] block">Novelty Distance Threshold (τ)</span>
-                <span class="font-mono text-[#1d1d1f]" id="overviewThresholdLabel">0.400 (Cosine)</span>
-              </div>
-              <div>
-                <span class="text-[#86868b] block">Replay Buffer Capacity</span>
-                <span class="font-medium text-[#1d1d1f]">M = 100 exemplars</span>
-              </div>
-              <div>
-                <span class="text-[#86868b] block">EMBER Ingestion Pipeline</span>
-                <span class="font-medium text-[#1d1d1f]">Memmap Streaming (2,381 dims)</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ========================================================= -->
-      <!-- VIEW 2: SCANNER -->
-      <!-- ========================================================= -->
-      <section id="view-scan" class="hidden space-y-6 max-w-6xl mx-auto">
-        <div>
-          <h1 class="text-xl font-semibold tracking-tight text-[#1d1d1f]">Static Executable Scanner</h1>
-          <p class="text-xs text-[#86868b]">Inspect Windows PE files without execution using calibrated ResMLP inference</p>
-        </div>
-
-        <!-- Target Input Card -->
-        <div class="apple-card p-6 space-y-4">
-          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div class="flex-1">
-              <label class="block text-xs font-medium text-[#86868b] uppercase tracking-wider mb-1.5">Target Path (File or Directory)</label>
-              <input type="text" id="targetPath" value="." class="w-full bg-[#f5f5f7] border border-black/5 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20 text-[#1d1d1f] font-mono" placeholder="C:\Path\To\Inspect" />
-            </div>
-            <div class="flex items-center space-x-2 pt-2 md:pt-5">
-              <button onclick="startScan()" id="btnStartScan" class="apple-btn-primary px-6 py-2.5 text-sm font-medium flex items-center space-x-2 shadow-sm">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                <span>Start Analysis</span>
-              </button>
-              <button onclick="cancelScan()" id="btnCancelScan" class="apple-btn-secondary px-4 py-2.5 text-sm font-medium hidden text-rose-600">
-                <span>Cancel</span>
-              </button>
-            </div>
-          </div>
-
-          <div class="flex flex-wrap items-center justify-between text-xs text-[#86868b] pt-2 border-t border-black/5 gap-2">
-            <div class="flex items-center space-x-4">
-              <label class="flex items-center space-x-1.5 cursor-pointer">
-                <input type="checkbox" id="chkAllFiles" class="rounded text-[#0071e3] focus:ring-0" />
-                <span>Inspect all files (not just PE binaries)</span>
-              </label>
-              <span>•</span>
-              <span>Feature Schema: <strong class="text-[#1d1d1f]">v1.0 (256-dim)</strong></span>
-            </div>
-            <div class="flex items-center space-x-2">
-              <span>Presets:</span>
-              <button onclick="setTarget('.')" class="text-[#0071e3] hover:underline">Workspace</button>
-              <span>|</span>
-              <button onclick="setTarget('tests')" class="text-[#0071e3] hover:underline">Tests</button>
-              <span>|</span>
-              <button onclick="setTarget('.venv/Scripts')" class="text-[#0071e3] hover:underline">VirtualEnv</button>
-            </div>
-          </div>
-
-          <!-- Progress Bar -->
-          <div id="progressContainer" class="hidden pt-2 space-y-2">
-            <div class="flex justify-between text-xs text-[#86868b]">
-              <span id="progressFileText">Scanning...</span>
-              <span id="progressCountText">0 / 0</span>
-            </div>
-            <div class="w-full bg-[#f0f0f2] h-2 rounded-full overflow-hidden">
-              <div id="progressBar" class="bg-[#0071e3] h-full w-0 transition-all duration-200"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Scan Results Table -->
-        <div class="apple-card overflow-hidden">
-          <div class="p-4 px-6 border-b border-black/5 flex items-center justify-between">
-            <h2 class="text-sm font-semibold text-[#1d1d1f]">Analysis Records</h2>
-            <div class="flex items-center space-x-2">
-              <button onclick="exportReport('json')" class="apple-btn-secondary px-3 py-1.5 text-xs font-medium">Export JSON</button>
-              <button onclick="exportReport('md')" class="apple-btn-secondary px-3 py-1.5 text-xs font-medium">Export Markdown</button>
-            </div>
-          </div>
-
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs">
-              <thead class="bg-[#f9f9fb] text-[#86868b] font-medium border-b border-black/5">
-                <tr>
-                  <th class="py-3 px-6">File Name</th>
-                  <th class="py-3 px-4">Verdict</th>
-                  <th class="py-3 px-4">Risk Probability</th>
-                  <th class="py-3 px-4">Novelty Distance</th>
-                  <th class="py-3 px-4">SHA-256</th>
-                  <th class="py-3 px-6 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="scanResultsTableBody" class="divide-y divide-black/[0.04]">
-                <tr>
-                  <td colspan="6" class="py-12 text-center text-[#86868b]">No active scan results. Click "Start Analysis" above.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- ========================================================= -->
-      <!-- VIEW 3: THE CENTRAL FEATURE — INTERACTIVE THREAT NETWORK -->
-      <!-- ========================================================= -->
-      <section id="view-network" class="hidden h-full flex flex-col -m-4 md:-m-6">
-        <!-- Network Toolbar -->
-        <div class="h-12 border-b border-black/5 bg-white/90 backdrop-blur px-4 flex items-center justify-between shrink-0 z-10">
-          <div class="flex items-center space-x-2">
-            <span class="text-xs font-semibold text-[#1d1d1f]">Threat Network Explorer</span>
-            <span class="text-[10px] text-[#86868b] bg-black/5 px-2 py-0.5 rounded-full" id="networkNodeCountBadge">Loading nodes...</span>
-          </div>
-
-          <!-- Filter & View Controls -->
-          <div class="flex items-center space-x-2 text-xs">
-            <!-- Filter Category Pills -->
-            <div class="hidden sm:flex items-center bg-[#f0f0f2] p-0.5 rounded-lg space-x-1">
-              <button onclick="filterNetworkCategory('all')" id="netFilter-all" class="px-2.5 py-1 rounded-md font-medium bg-white text-[#1d1d1f] shadow-xs">All</button>
-              <button onclick="filterNetworkCategory('malware')" id="netFilter-malware" class="px-2.5 py-1 rounded-md text-[#86868b] hover:text-[#1d1d1f]">Malware</button>
-              <button onclick="filterNetworkCategory('suspicious')" id="netFilter-suspicious" class="px-2.5 py-1 rounded-md text-[#86868b] hover:text-[#1d1d1f]">Suspicious</button>
-              <button onclick="filterNetworkCategory('benign')" id="netFilter-benign" class="px-2.5 py-1 rounded-md text-[#86868b] hover:text-[#1d1d1f]">Benign</button>
-            </div>
-
-            <!-- Zoom & Pan Controls -->
-            <div class="flex items-center border border-black/10 rounded-lg overflow-hidden bg-white">
-              <button onclick="zoomNetwork(1.2)" class="px-2 py-1 hover:bg-black/5 text-[#1d1d1f]" title="Zoom In">+</button>
-              <button onclick="zoomNetwork(0.8)" class="px-2 py-1 hover:bg-black/5 text-[#1d1d1f]" title="Zoom Out">−</button>
-              <button onclick="resetNetworkView()" class="px-2 py-1 hover:bg-black/5 text-[#86868b]" title="Fit View">Fit</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Canvas + Right Docked Contextual Details Panel -->
-        <div class="flex-1 flex overflow-hidden relative">
-          <!-- Main Canvas -->
-          <div class="flex-1 h-full graph-canvas-container relative overflow-hidden" id="canvasWrapper">
-            <canvas id="threatNetworkCanvas" class="w-full h-full block cursor-grab active:cursor-grabbing"></canvas>
-
-            <!-- Canvas Legend Overlay -->
-            <div class="absolute bottom-4 left-4 bg-white/90 backdrop-blur-md p-2.5 rounded-xl border border-black/5 shadow-xs text-[11px] space-y-1.5 select-none pointer-events-none">
-              <div class="font-medium text-[#1d1d1f] mb-1">Topology Legend</div>
-              <div class="flex items-center space-x-2"><span class="w-2.5 h-2.5 rounded-full bg-[#FF3B30]"></span><span class="text-[#515154]">Known Malware Family</span></div>
-              <div class="flex items-center space-x-2"><span class="w-2.5 h-2.5 rounded-full bg-[#FF9500]"></span><span class="text-[#515154]">Suspicious / Flagged Sample</span></div>
-              <div class="flex items-center space-x-2"><span class="w-2.5 h-2.5 rounded-full bg-[#AF52DE]"></span><span class="text-[#515154]">Out-of-Distribution / Novel</span></div>
-              <div class="flex items-center space-x-2"><span class="w-2.5 h-2.5 rounded-full bg-[#34C759]"></span><span class="text-[#515154]">Likely Benign Prototype</span></div>
-              <div class="text-[10px] text-[#86868b] pt-1 border-t border-black/5">Edges indicate measured cosine similarity</div>
-            </div>
-          </div>
-
-          <!-- RIGHT-DOCKED CONTEXTUAL DETAILS PANEL -->
-          <div id="detailsPanel" class="w-96 bg-white border-l border-black/5 flex flex-col shrink-0 shadow-lg transition-transform duration-200">
-            <!-- Panel Header -->
-            <div class="p-4 border-b border-black/5 flex items-center justify-between">
-              <div>
-                <span class="text-[10px] uppercase font-semibold text-[#86868b] tracking-wider block">Inspecting Node</span>
-                <h3 class="text-sm font-semibold text-[#1d1d1f] truncate max-w-[240px]" id="panelNodeTitle">Select a node</h3>
-              </div>
-              <button onclick="closeDetailsPanel()" class="text-[#86868b] hover:text-[#1d1d1f] p-1 rounded">✕</button>
-            </div>
-
-            <!-- Panel Segmented Tabs -->
-            <div class="flex border-b border-black/5 bg-[#fbfbfd] text-xs font-medium text-[#86868b]">
-              <button onclick="switchPanelTab('overview')" id="panelTabBtn-overview" class="flex-1 py-2 text-center text-[#1d1d1f] border-b-2 border-[#0071e3]">Overview</button>
-              <button onclick="switchPanelTab('evidence')" id="panelTabBtn-evidence" class="flex-1 py-2 text-center hover:text-[#1d1d1f]">Evidence</button>
-              <button onclick="switchPanelTab('relationships')" id="panelTabBtn-relationships" class="flex-1 py-2 text-center hover:text-[#1d1d1f]">Similarity</button>
-              <button onclick="switchPanelTab('metadata')" id="panelTabBtn-metadata" class="flex-1 py-2 text-center hover:text-[#1d1d1f]">Audit</button>
-            </div>
-
-            <!-- Panel Scrollable Body -->
-            <div class="flex-1 overflow-y-auto p-4 space-y-4 text-xs" id="panelTabContent">
-              <!-- Content dynamically rendered via JS -->
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ========================================================= -->
-      <!-- VIEW 4: FAMILY EXPLORER -->
-      <!-- ========================================================= -->
-      <section id="view-families" class="hidden space-y-6 max-w-6xl mx-auto">
-        <div>
-          <h1 class="text-xl font-semibold tracking-tight text-[#1d1d1f]">Malware Family Explorer</h1>
-          <p class="text-xs text-[#86868b]">Deep-dive into known malware families, structural TTP markers, and baseline prototypes</p>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="familyCardsContainer">
-          <!-- Dynamically populated -->
-        </div>
-      </section>
-
-      <!-- ========================================================= -->
-      <!-- VIEW 5: LEARNING TIMELINE -->
-      <!-- ========================================================= -->
-      <section id="view-timeline" class="hidden space-y-6 max-w-6xl mx-auto">
-        <div>
-          <h1 class="text-xl font-semibold tracking-tight text-[#1d1d1f]">Continual Learning & Catastrophic Forgetting</h1>
-          <p class="text-xs text-[#86868b]">Replay benchmark telemetry comparing four memory retention strategies under bounded budgets</p>
-        </div>
-
-        <!-- Chronological Batches Flow -->
-        <div class="apple-card p-6 space-y-4">
-          <h2 class="text-sm font-semibold text-[#1d1d1f]">Chronological Task Progression (T₁ – T₅)</h2>
-          <div class="grid grid-cols-1 md:grid-cols-5 gap-3" id="timelineBatchesGrid">
-            <!-- Dynamically populated batches -->
-          </div>
-        </div>
-
-        <!-- Strategy Benchmark Table -->
-        <div class="apple-card overflow-hidden">
-          <div class="p-4 px-6 border-b border-black/5 flex items-center justify-between">
-            <h2 class="text-sm font-semibold text-[#1d1d1f]">Experimental Comparison (Budget: M = 100, B = 50)</h2>
-            <span class="text-xs text-[#86868b]">Evaluated across multi-seed runs</span>
-          </div>
-
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs">
-              <thead class="bg-[#f9f9fb] text-[#86868b] font-medium border-b border-black/5">
-                <tr>
-                  <th class="py-3 px-6">Strategy</th>
-                  <th class="py-3 px-4">Macro-F1</th>
-                  <th class="py-3 px-4">Catastrophic Forgetting (F_T)</th>
-                  <th class="py-3 px-4">Backward Transfer (BWT)</th>
-                  <th class="py-3 px-4">Benign FPR</th>
-                  <th class="py-3 px-6">Training Latency</th>
-                </tr>
-              </thead>
-              <tbody id="timelineStrategyTableBody" class="divide-y divide-black/[0.04]">
-                <!-- Populated via JS -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Research Narrative Card -->
-        <div class="apple-card p-6 space-y-3 text-xs leading-relaxed text-[#515154]">
-          <h3 class="text-sm font-semibold text-[#1d1d1f]">Scientific Methodology & Endpoint Feasibility</h3>
-          <p>
-            Standard sequential fine-tuning on incoming threat streams causes <strong>catastrophic forgetting</strong> of legacy malware signatures.
-            In ThreatWeaver, we evaluate bounded replay memory where only exemplars with high predictive entropy (uncertainty) and representative embedding cluster prototypes (diversity) are retained in the buffer ($M=100$).
-          </p>
-          <p>
-            This ensures endpoint antivirus memory consumption remains strictly constant while preserving zero false-positive rates on clean system binaries.
-          </p>
-        </div>
-      </section>
-
-      <!-- ========================================================= -->
-      <!-- VIEW 6: QUARANTINE VAULT -->
-      <!-- ========================================================= -->
-      <section id="view-quarantine" class="hidden space-y-6 max-w-6xl mx-auto">
-        <div class="flex items-center justify-between">
-          <div>
-            <h1 class="text-xl font-semibold tracking-tight text-[#1d1d1f]">Quarantine Vault</h1>
-            <p class="text-xs text-[#86868b]">Reversibly isolated, XOR-neutralized (0x5A) binaries with atomic integrity verification</p>
-          </div>
-          <button onclick="loadQuarantineList()" class="apple-btn-secondary px-4 py-2 text-xs font-medium">Refresh Records</button>
-        </div>
-
-        <div class="apple-card overflow-hidden">
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs">
-              <thead class="bg-[#f9f9fb] text-[#86868b] font-medium border-b border-black/5">
-                <tr>
-                  <th class="py-3 px-6">Quarantine ID</th>
-                  <th class="py-3 px-4">Original Binary Name</th>
-                  <th class="py-3 px-4">Original Path</th>
-                  <th class="py-3 px-4">Status</th>
-                  <th class="py-3 px-4">Date Isolated</th>
-                  <th class="py-3 px-6 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="quarantineTableBody" class="divide-y divide-black/[0.04]">
-                <tr><td colspan="6" class="py-8 text-center text-[#86868b]">Loading vault records...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- ========================================================= -->
-      <!-- VIEW 7: REPORTS -->
-      <!-- ========================================================= -->
-      <section id="view-reports" class="hidden space-y-6 max-w-6xl mx-auto">
-        <div>
-          <h1 class="text-xl font-semibold tracking-tight text-[#1d1d1f]">Audit & Scan Reports</h1>
-          <p class="text-xs text-[#86868b]">Local chronological inspection history and exportable security audit trails</p>
-        </div>
-
-        <div class="apple-card overflow-hidden">
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs">
-              <thead class="bg-[#f9f9fb] text-[#86868b] font-medium border-b border-black/5">
-                <tr>
-                  <th class="py-3 px-6">Scan ID</th>
-                  <th class="py-3 px-4">Timestamp</th>
-                  <th class="py-3 px-4">Target Path</th>
-                  <th class="py-3 px-4">Duration</th>
-                  <th class="py-3 px-4">Total</th>
-                  <th class="py-3 px-4 text-amber-600">Suspicious</th>
-                  <th class="py-3 px-6 text-right">Export</th>
-                </tr>
-              </thead>
-              <tbody id="historyTableBody" class="divide-y divide-black/[0.04]">
-                <tr><td colspan="7" class="py-8 text-center text-[#86868b]">Loading scan history...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- ========================================================= -->
-      <!-- VIEW 8: MODEL & DATA -->
-      <!-- ========================================================= -->
-      <section id="view-model" class="hidden space-y-6 max-w-6xl mx-auto">
-        <div>
-          <h1 class="text-xl font-semibold tracking-tight text-[#1d1d1f]">Model & Dataset Architecture</h1>
-          <p class="text-xs text-[#86868b]">PyTorch ResMLP classifier, calibrated novelty detector, and EMBER2024 ingestion pipeline</p>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div class="apple-card p-6 space-y-4">
-            <h2 class="text-sm font-semibold text-[#1d1d1f] border-b border-black/5 pb-3">ResMLP Deep Learning Architecture</h2>
-            <div class="space-y-3 text-xs">
-              <div class="bg-[#f5f5f7] p-3 rounded-xl font-mono text-[11px] space-y-1">
-                <div>Input Features: 256 dimensions</div>
-                <div>Projection: Linear(256 → 256) + LayerNorm + GELU</div>
-                <div>Residual Block 1: LayerNorm → Linear(256→256) → GELU → Dropout(0.1)</div>
-                <div>Residual Block 2: LayerNorm → Linear(256→256) → GELU → Dropout(0.1)</div>
-                <div>Embedding Bottleneck: Linear(256 → 64) [L2-Normalized]</div>
-                <div>Classification Head: Linear(64 → 2) [Softmax / Logits]</div>
-              </div>
-              <div class="flex justify-between text-[#86868b]">
-                <span>Checkpoint Location</span>
-                <span class="font-mono text-[#1d1d1f]">artifacts/checkpoints/threatweaver_v1.pt</span>
-              </div>
-              <div class="flex justify-between text-[#86868b]">
-                <span>Feature Schema Version</span>
-                <span class="font-medium text-[#1d1d1f]">v1.0 (Deterministic Static PE)</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="apple-card p-6 space-y-4">
-            <h2 class="text-sm font-semibold text-[#1d1d1f] border-b border-black/5 pb-3">Novelty Calibration & EMBER Data</h2>
-            <div class="space-y-3 text-xs">
-              <div class="bg-[#f5f5f7] p-3 rounded-xl space-y-2">
-                <div class="flex justify-between">
-                  <span class="text-[#86868b]">Novelty Metric:</span>
-                  <span class="font-medium text-[#1d1d1f]">Cosine Distance on Unit Embeddings</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-[#86868b]">Decision Threshold (τ):</span>
-                  <span class="font-mono font-medium text-[#1d1d1f]">0.400 (Calibrated on Validation)</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-[#86868b]">Prototype Clustering:</span>
-                  <span class="font-medium text-[#1d1d1f]">k-NN Centroids per Family</span>
-                </div>
-              </div>
-              <div class="text-[#515154] leading-relaxed">
-                The EMBER2024 loader processes 2,381-dimensional raw PE feature vectors using memory-mapped streaming, strictly preserving temporal partitions to eliminate future-to-past data leakage.
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ========================================================= -->
-      <!-- VIEW 9: SETTINGS -->
-      <!-- ========================================================= -->
-      <section id="view-settings" class="hidden space-y-6 max-w-4xl mx-auto">
-        <div>
-          <h1 class="text-xl font-semibold tracking-tight text-[#1d1d1f]">Settings & Preferences</h1>
-          <p class="text-xs text-[#86868b]">Configure scanner parameters, quarantine policies, and engine thresholds</p>
-        </div>
-
-        <div class="apple-card p-6 space-y-5">
-          <div class="space-y-2">
-            <label class="text-xs font-semibold text-[#1d1d1f] block">Novelty Distance Threshold (τ)</label>
-            <div class="flex items-center space-x-4">
-              <input type="range" id="settingThresholdSlider" min="0.10" max="0.90" step="0.05" value="0.40" oninput="updateThresholdDisplay(this.value)" class="flex-1" />
-              <span class="font-mono text-sm w-12 text-right" id="settingThresholdValue">0.40</span>
-            </div>
-            <p class="text-[11px] text-[#86868b]">Samples exceeding this distance from verified clusters are categorized as Unfamiliar / Out-of-Distribution.</p>
-          </div>
-
-          <div class="space-y-2 border-t border-black/5 pt-4">
-            <label class="text-xs font-semibold text-[#1d1d1f] block">Parallel Analysis Workers</label>
-            <select id="settingWorkersSelect" class="bg-[#f5f5f7] border border-black/10 rounded-lg px-3 py-1.5 text-xs text-[#1d1d1f]">
-              <option value="2">2 Concurrent Worker Threads</option>
-              <option value="4" selected>4 Concurrent Worker Threads</option>
-              <option value="8">8 Concurrent Worker Threads</option>
-            </select>
-          </div>
-
-          <div class="space-y-2 border-t border-black/5 pt-4">
-            <label class="text-xs font-semibold text-[#1d1d1f] block">Quarantine Vault Directory</label>
-            <input type="text" value=".threatweaver_quarantine" disabled class="bg-[#f5f5f7] border border-black/5 rounded-lg px-3 py-1.5 text-xs font-mono text-[#86868b] w-full" />
-            <p class="text-[11px] text-[#86868b]">Isolated directory protected from Windows Search indexing and execution.</p>
-          </div>
-
-          <div class="pt-4 border-t border-black/5 flex justify-end">
-            <button onclick="saveSettings()" class="apple-btn-primary px-6 py-2 text-xs font-medium">Save Preferences</button>
-          </div>
-        </div>
-      </section>
-
-    </main>
-  </div>
-
-  <!-- DETAIL INSPECTION MODAL -->
-  <div id="detailModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-    <div class="apple-card max-w-xl w-full p-6 space-y-4 shadow-2xl">
-      <div class="flex items-center justify-between border-b border-black/5 pb-3">
-        <h3 class="text-base font-semibold text-[#1d1d1f]" id="modalFileName">File Details</h3>
-        <button onclick="closeModal()" class="text-[#86868b] hover:text-[#1d1d1f] text-sm">✕</button>
-      </div>
-      <div class="space-y-3 text-xs" id="modalBody"></div>
-      <div class="flex justify-end pt-2 border-t border-black/5">
-        <button onclick="closeModal()" class="apple-btn-secondary px-5 py-2 text-xs font-medium">Done</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- QUARANTINE CONFIRMATION MODAL -->
-  <div id="quarantineModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-    <div class="apple-card max-w-md w-full p-6 space-y-4 shadow-2xl">
-      <div class="flex items-center space-x-3 text-amber-600">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-        <h3 class="text-base font-semibold text-[#1d1d1f]">Confirm File Isolation</h3>
-      </div>
-      <p class="text-xs text-[#86868b]">
-        Are you sure you want to isolate this file to the restricted quarantine vault? The binary will be encrypted with an XOR mask and removed from its current directory. You can restore it at any time.
-      </p>
-      <div class="bg-[#f5f5f7] p-3 rounded-xl text-xs font-mono break-all text-[#1d1d1f]" id="quarantineModalPath"></div>
-      <div class="flex justify-end space-x-2 pt-2">
-        <button onclick="closeQuarantineModal()" class="apple-btn-secondary px-4 py-2 text-xs font-medium">Cancel</button>
-        <button onclick="executeQuarantine()" class="apple-btn-primary px-5 py-2 text-xs font-medium bg-amber-600 hover:bg-amber-700">Confirm Quarantine</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- JAVASCRIPT APP LOGIC & CANVAS GRAPH RENDERER -->
-  <script>
-    // State management
-    let activeTab = 'overview';
-    let pollInterval = null;
-    let currentResults = [];
-    let pendingQuarantinePath = null;
-    let graphData = { nodes: [], edges: [] };
-    let selectedNode = null;
-    let selectedPanelTab = 'overview';
-    let filterCategory = 'all';
-
-    // Canvas Physics State
-    let canvas, ctx;
-    let previewCanvas, previewCtx;
-    let transform = { x: 0, y: 0, k: 1 };
-    let isDraggingCanvas = false;
-    let draggedNode = null;
-    let dragStart = { x: 0, y: 0 };
-    let animationFrameId = null;
-
-    window.addEventListener('DOMContentLoaded', () => {
-      initCanvas();
-      refreshSystemStatus();
-      loadThreatNetworkData();
-      loadQuarantineList();
-      loadHistoryList();
-      loadFamiliesList();
-      loadTimelineData();
-
-      // Keyboard shortcut ⌘K / Ctrl+K
-      window.addEventListener('keydown', (e) => {
-        if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-          e.preventDefault();
-          document.getElementById('globalSearchInput').focus();
-        }
-      });
-    });
-
-    function navigateTab(tabId) {
-      const tabs = ['overview', 'scan', 'network', 'families', 'timeline', 'quarantine', 'reports', 'model', 'settings'];
-      tabs.forEach(t => {
-        const viewEl = document.getElementById(`view-${t}`);
-        const navEl = document.getElementById(`nav-${t}`);
-        if (viewEl) viewEl.classList.add('hidden');
-        if (navEl) navEl.classList.remove('active');
-      });
-
-      const activeView = document.getElementById(`view-${tabId}`);
-      const activeNav = document.getElementById(`nav-${tabId}`);
-      if (activeView) activeView.classList.remove('hidden');
-      if (activeNav) activeNav.classList.add('active');
-
-      activeTab = tabId;
-
-      if (tabId === 'network') {
-        resizeCanvas();
-        startSimulation();
-      } else if (tabId === 'quarantine') {
-        loadQuarantineList();
-      } else if (tabId === 'reports') {
-        loadHistoryList();
-      }
-    }
-
-    function toggleSidebar() {
-      const sb = document.getElementById('appSidebar');
-      sb.classList.toggle('hidden');
-    }
-
-    async function refreshSystemStatus() {
-      try {
-        const resp = await fetch('/api/status');
-        const data = await resp.json();
-        document.getElementById('topVersionBadge').innerText = 'v' + data.version;
-        document.getElementById('kpiFilesScanned').innerText = data.total_files_scanned || 0;
-        document.getElementById('kpiDetections').innerText = (data.suspicious_count || 0) + (data.unfamiliar_count || 0);
-        document.getElementById('kpiQuarantined').innerText = data.quarantine_count || 0;
-        document.getElementById('badgeQuarantineCount').innerText = data.quarantine_count || 0;
-        document.getElementById('sidebarDeviceLabel').innerText = 'Device: ' + (data.device || 'CPU');
-        if (data.novelty_threshold) {
-          document.getElementById('overviewThresholdLabel').innerText = data.novelty_threshold.toFixed(3) + ' (Cosine)';
-        }
-      } catch (err) {
-        console.error('Failed to fetch status:', err);
-      }
-    }
-
-    // ==========================================
-    // THREAT NETWORK GRAPH PHYSICS & CANVAS
-    // ==========================================
-    function initCanvas() {
-      canvas = document.getElementById('threatNetworkCanvas');
-      ctx = canvas.getContext('2d');
-      previewCanvas = document.getElementById('overviewPreviewCanvas');
-      previewCtx = previewCanvas.getContext('2d');
-
-      window.addEventListener('resize', () => {
-        resizeCanvas();
-      });
-
-      // Interactive canvas events
-      canvas.addEventListener('mousedown', onCanvasMouseDown);
-      window.addEventListener('mousemove', onCanvasMouseMove);
-      window.addEventListener('mouseup', onCanvasMouseUp);
-      canvas.addEventListener('wheel', onCanvasWheel, { passive: false });
-    }
-
-    function resizeCanvas() {
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      ctx.scale(dpr, dpr);
-
-      if (previewCanvas) {
-        const pRect = previewCanvas.getBoundingClientRect();
-        previewCanvas.width = pRect.width * dpr;
-        previewCanvas.height = pRect.height * dpr;
-        previewCtx.scale(dpr, dpr);
-      }
-    }
-
-    async function loadThreatNetworkData() {
-      try {
-        const resp = await fetch('/api/threat-network');
-        graphData = await resp.json();
-        document.getElementById('networkNodeCountBadge').innerText = `${graphData.nodes.length} nodes • ${graphData.edges.length} edges`;
-
-        // Position nodes initially in circular clusters
-        const w = 800;
-        const h = 500;
-        graphData.nodes.forEach((n, idx) => {
-          if (!n.x) {
-            const angle = (idx / graphData.nodes.length) * Math.PI * 2;
-            const radius = n.type === 'family' ? 140 : 240 + (idx % 3) * 35;
-            n.x = w / 2 + Math.cos(angle) * radius;
-            n.y = h / 2 + Math.sin(angle) * radius;
-            n.vx = (Math.random() - 0.5) * 0.5;
-            n.vy = (Math.random() - 0.5) * 0.5;
-          }
-        });
-
-        // Set initial selected node
-        if (graphData.nodes.length > 0 && !selectedNode) {
-          selectNode(graphData.nodes[0]);
-        }
-
-        renderOverviewRecentTable();
-        startSimulation();
-      } catch (err) {
-        console.error('Failed to load network data:', err);
-      }
-    }
-
-    function startSimulation() {
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-
-      function loop() {
-        stepPhysics();
-        drawGraph();
-        drawPreviewGraph();
-        animationFrameId = requestAnimationFrame(loop);
-      }
-      loop();
-    }
-
-    function stepPhysics() {
-      const nodes = graphData.nodes;
-      const edges = graphData.edges;
-      if (!nodes || nodes.length === 0) return;
-
-      const centerX = 400;
-      const centerY = 250;
-
-      // Node repulsion
-      for (let i = 0; i < nodes.length; i++) {
-        const a = nodes[i];
-        // Center gravity
-        a.vx += (centerX - a.x) * 0.0003;
-        a.vy += (centerY - a.y) * 0.0003;
-
-        for (let j = i + 1; j < nodes.length; j++) {
-          const b = nodes[j];
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const dist = Math.hypot(dx, dy) || 1;
-          const minDist = (a.size || 12) + (b.size || 12) + 40;
-          if (dist < minDist) {
-            const force = (minDist - dist) / dist * 0.05;
-            a.vx -= dx * force;
-            a.vy -= dy * force;
-            b.vx += dx * force;
-            b.vy += dy * force;
-          }
-        }
-      }
-
-      // Edge spring attraction
-      edges.forEach(e => {
-        const a = typeof e.source === 'object' ? e.source : nodes.find(n => n.id === e.source);
-        const b = typeof e.target === 'object' ? e.target : nodes.find(n => n.id === e.target);
-        if (a && b) {
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const dist = Math.hypot(dx, dy) || 1;
-          const targetDist = e.type === 'inter_family' ? 180 : 90;
-          const force = (dist - targetDist) * 0.003 * (e.similarity || 0.8);
-          if (a !== draggedNode) {
-            a.vx += dx * force;
-            a.vy += dy * force;
-          }
-          if (b !== draggedNode) {
-            b.vx -= dx * force;
-            b.vy -= dy * force;
-          }
-        }
-      });
-
-      // Velocity damping & position update
-      nodes.forEach(n => {
-        if (n === draggedNode) return;
-        n.vx *= 0.85;
-        n.vy *= 0.85;
-        n.x += n.vx;
-        n.y += n.vy;
-      });
-    }
-
-    function drawGraph() {
-      if (!ctx || !canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      ctx.clearRect(0, 0, rect.width, rect.height);
-
-      ctx.save();
-      ctx.translate(transform.x, transform.y);
-      ctx.scale(transform.k, transform.k);
-
-      const nodes = graphData.nodes;
-      const edges = graphData.edges;
-
-      // Draw Edges
-      edges.forEach(e => {
-        const a = typeof e.source === 'object' ? e.source : nodes.find(n => n.id === e.source);
-        const b = typeof e.target === 'object' ? e.target : nodes.find(n => n.id === e.target);
-        if (!a || !b) return;
-
-        const isConnected = selectedNode && (a.id === selectedNode.id || b.id === selectedNode.id);
-        const isDimmed = selectedNode && !isConnected;
-
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-
-        if (isConnected) {
-          ctx.strokeStyle = '#0071e3';
-          ctx.lineWidth = 1.8;
-          ctx.globalAlpha = 0.9;
-        } else if (isDimmed) {
-          ctx.strokeStyle = 'rgba(0, 0, 0, 0.06)';
-          ctx.lineWidth = 0.8;
-          ctx.globalAlpha = 0.2;
-        } else {
-          ctx.strokeStyle = e.type === 'inter_family' ? 'rgba(0, 0, 0, 0.18)' : 'rgba(0, 0, 0, 0.08)';
-          ctx.lineWidth = e.type === 'inter_family' ? 1.2 : 0.9;
-          ctx.globalAlpha = 0.7;
-        }
-        ctx.stroke();
-      });
-
-      // Draw Nodes
-      nodes.forEach(n => {
-        // Filter visibility
-        if (filterCategory !== 'all') {
-          if (filterCategory === 'malware' && n.category !== 'ransomware' && n.category !== 'downloader' && n.category !== 'backdoor') return;
-          if (filterCategory === 'suspicious' && n.category !== 'suspicious' && n.category !== 'injector' && n.category !== 'infostealer') return;
-          if (filterCategory === 'benign' && n.category !== 'benign') return;
-        }
-
-        const isSelected = selectedNode && selectedNode.id === n.id;
-        const isNeighbor = selectedNode && isNodeConnected(selectedNode, n);
-        const isDimmed = selectedNode && !isSelected && !isNeighbor;
-
-        ctx.save();
-        ctx.globalAlpha = isDimmed ? 0.2 : 1.0;
-
-        // Selection halo
-        if (isSelected) {
-          ctx.beginPath();
-          ctx.arc(n.x, n.y, (n.size || 12) + 6, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(0, 113, 227, 0.15)';
-          ctx.fill();
-          ctx.strokeStyle = '#0071e3';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-        }
-
-        // Node circle
-        ctx.beginPath();
-        ctx.arc(n.x, n.y, n.size || 12, 0, Math.PI * 2);
-        ctx.fillStyle = n.color || '#86868b';
-        ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Node label (if family or selected/neighbor)
-        if (n.type === 'family' || isSelected || isNeighbor) {
-          ctx.font = isSelected ? '600 11px -apple-system, sans-serif' : '500 10px -apple-system, sans-serif';
-          ctx.fillStyle = isSelected ? '#1d1d1f' : '#515154';
-          ctx.textAlign = 'center';
-          ctx.fillText(n.label, n.x, n.y + (n.size || 12) + 12);
-        }
-
-        ctx.restore();
-      });
-
-      ctx.restore();
-    }
-
-    function drawPreviewGraph() {
-      if (!previewCtx || !previewCanvas) return;
-      const rect = previewCanvas.getBoundingClientRect();
-      previewCtx.clearRect(0, 0, rect.width, rect.height);
-
-      previewCtx.save();
-      const scale = 0.55;
-      previewCtx.scale(scale, scale);
-      previewCtx.translate(100, 40);
-
-      const nodes = graphData.nodes || [];
-      const edges = graphData.edges || [];
-
-      edges.forEach(e => {
-        const a = typeof e.source === 'object' ? e.source : nodes.find(n => n.id === e.source);
-        const b = typeof e.target === 'object' ? e.target : nodes.find(n => n.id === e.target);
-        if (!a || !b) return;
-        previewCtx.beginPath();
-        previewCtx.moveTo(a.x, a.y);
-        previewCtx.lineTo(b.x, b.y);
-        previewCtx.strokeStyle = 'rgba(0,0,0,0.06)';
-        previewCtx.lineWidth = 1;
-        previewCtx.stroke();
-      });
-
-      nodes.forEach(n => {
-        previewCtx.beginPath();
-        previewCtx.arc(n.x, n.y, n.size || 10, 0, Math.PI * 2);
-        previewCtx.fillStyle = n.color || '#86868b';
-        previewCtx.fill();
-      });
-
-      previewCtx.restore();
-    }
-
-    function isNodeConnected(a, b) {
-      if (!graphData.edges) return false;
-      return graphData.edges.some(e => {
-        const sId = typeof e.source === 'object' ? e.source.id : e.source;
-        const tId = typeof e.target === 'object' ? e.target.id : e.target;
-        return (sId === a.id && tId === b.id) || (sId === b.id && tId === a.id);
-      });
-    }
-
-    // Canvas Mouse Interaction
-    function onCanvasMouseDown(e) {
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = (e.clientX - rect.left - transform.x) / transform.k;
-      const mouseY = (e.clientY - rect.top - transform.y) / transform.k;
-
-      // Check if clicked a node
-      const clicked = graphData.nodes.find(n => {
-        return Math.hypot(n.x - mouseX, n.y - mouseY) <= (n.size || 12) + 4;
-      });
-
-      if (clicked) {
-        draggedNode = clicked;
-        selectNode(clicked);
-      } else {
-        isDraggingCanvas = true;
-        dragStart.x = e.clientX - transform.x;
-        dragStart.y = e.clientY - transform.y;
-      }
-    }
-
-    function onCanvasMouseMove(e) {
-      if (draggedNode) {
-        const rect = canvas.getBoundingClientRect();
-        draggedNode.x = (e.clientX - rect.left - transform.x) / transform.k;
-        draggedNode.y = (e.clientY - rect.top - transform.y) / transform.k;
-      } else if (isDraggingCanvas) {
-        transform.x = e.clientX - dragStart.x;
-        transform.y = e.clientY - dragStart.y;
-      }
-    }
-
-    function onCanvasMouseUp() {
-      draggedNode = null;
-      isDraggingCanvas = false;
-    }
-
-    function onCanvasWheel(e) {
-      e.preventDefault();
-      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-      zoomNetwork(zoomFactor);
-    }
-
-    function zoomNetwork(factor) {
-      transform.k = Math.max(0.3, Math.min(3.0, transform.k * factor));
-    }
-
-    function resetNetworkView() {
-      transform = { x: 0, y: 0, k: 1 };
-    }
-
-    function filterNetworkCategory(cat) {
-      filterCategory = cat;
-      ['all', 'malware', 'suspicious', 'benign'].forEach(c => {
-        const btn = document.getElementById(`netFilter-${c}`);
-        if (btn) {
-          if (c === cat) {
-            btn.className = 'px-2.5 py-1 rounded-md font-medium bg-white text-[#1d1d1f] shadow-xs';
-          } else {
-            btn.className = 'px-2.5 py-1 rounded-md text-[#86868b] hover:text-[#1d1d1f]';
-          }
-        }
-      });
-    }
-
-    // ==========================================
-    // CONTEXTUAL DETAILS PANEL (4 TABS)
-    // ==========================================
-    async function selectNode(node) {
-      selectedNode = node;
-      document.getElementById('panelNodeTitle').innerText = node.label;
-      document.getElementById('detailsPanel').classList.remove('translate-x-full');
-
-      // Fetch sample attribution details from API
-      try {
-        const resp = await fetch(`/api/sample-details?id=${encodeURIComponent(node.id)}&sha256=${encodeURIComponent(node.sha256 || '')}`);
-        const data = await resp.json();
-        renderPanelTabContent(data);
-      } catch (err) {
-        renderPanelTabContent({ node: node });
-      }
-    }
-
-    function closeDetailsPanel() {
-      selectedNode = null;
-      document.getElementById('detailsPanel').classList.add('translate-x-full');
-    }
-
-    function switchPanelTab(tab) {
-      selectedPanelTab = tab;
-      ['overview', 'evidence', 'relationships', 'metadata'].forEach(t => {
-        const btn = document.getElementById(`panelTabBtn-${t}`);
-        if (btn) {
-          if (t === tab) {
-            btn.className = 'flex-1 py-2 text-center text-[#1d1d1f] border-b-2 border-[#0071e3] font-medium';
-          } else {
-            btn.className = 'flex-1 py-2 text-center text-[#86868b] hover:text-[#1d1d1f]';
-          }
-        }
-      });
-      if (selectedNode) selectNode(selectedNode);
-    }
-
-    function renderPanelTabContent(data) {
-      const node = data.node || selectedNode;
-      const container = document.getElementById('panelTabContent');
-      if (!node) return;
-
-      if (selectedPanelTab === 'overview') {
-        const riskPct = ((node.risk || 0.0) * 100).toFixed(1);
-        const verdictBadge = getVerdictBadgeHtml(node.verdict || (node.risk >= 0.5 ? 'Suspicious' : 'Likely Benign'));
-
-        container.innerHTML = `
-          <div class="space-y-4">
-            <div>
-              <span class="text-[#86868b] text-[11px] block">Security Verdict</span>
-              <div class="mt-1">${verdictBadge}</div>
-            </div>
-
-            <div>
-              <div class="flex justify-between text-[11px] text-[#86868b] mb-1">
-                <span>Calibrated Risk Score</span>
-                <span class="font-mono text-[#1d1d1f] font-semibold">${riskPct}%</span>
-              </div>
-              <div class="w-full bg-[#f0f0f2] h-2 rounded-full overflow-hidden">
-                <div class="h-full rounded-full ${node.risk >= 0.5 ? 'bg-amber-500' : 'bg-emerald-500'}" style="width: ${riskPct}%"></div>
-              </div>
-            </div>
-
-            <div class="bg-[#f5f5f7] p-3 rounded-xl space-y-2">
-              <div class="flex justify-between">
-                <span class="text-[#86868b]">File Size:</span>
-                <span class="font-mono text-[#1d1d1f]">${((node.file_size_bytes || 12000) / 1024).toFixed(1)} KB</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-[#86868b]">Category:</span>
-                <span class="font-medium text-[#1d1d1f] uppercase text-[10px]">${escapeHtml(node.category || 'unknown')}</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-[#86868b]">Novelty Distance:</span>
-                <span class="font-mono text-[#1d1d1f]">${(node.novelty || 0.0).toFixed(3)}</span>
-              </div>
-            </div>
-
-            <div>
-              <span class="text-[#86868b] text-[11px] block mb-1">SHA-256 Hash</span>
-              <div class="flex items-center space-x-2 bg-[#f5f5f7] p-2 rounded-lg font-mono text-[10px] break-all">
-                <span class="flex-1">${escapeHtml(node.sha256 || 'N/A')}</span>
-                <button onclick="copyToClipboard('${escapeHtml(node.sha256 || '')}')" class="text-[#0071e3] hover:underline shrink-0" title="Copy Hash">Copy</button>
-              </div>
-            </div>
-
-            ${node.file_path ? `
-              <div class="pt-2 border-t border-black/5">
-                <button onclick="promptQuarantine('${escapeHtml(node.file_path)}')" class="apple-btn-secondary w-full py-2 text-rose-600 font-medium hover:bg-rose-50">
-                  Isolate to Quarantine Vault
-                </button>
-              </div>
-            ` : ''}
-          </div>
-        `;
-      } else if (selectedPanelTab === 'evidence') {
-        const evidence = node.evidence_points || [];
-        const attributions = data.feature_attribution || [];
-
-        container.innerHTML = `
-          <div class="space-y-4">
-            <div>
-              <span class="text-[#86868b] font-medium block mb-2">Static PE Evidence Points</span>
-              ${evidence.length > 0 ? `
-                <ul class="space-y-1.5 list-disc pl-4 text-[#1d1d1f]">
-                  ${evidence.map(e => `<li>${escapeHtml(e)}</li>`).join('')}
-                </ul>
-              ` : `
-                <div class="text-[#86868b] italic">No anomalies flagged in PE structure.</div>
-              `}
-            </div>
-
-            <div class="border-t border-black/5 pt-3 space-y-2.5">
-              <span class="text-[#86868b] font-medium block">Feature Attribution Contribution</span>
-              ${attributions.map(a => `
-                <div>
-                  <div class="flex justify-between text-[11px] mb-0.5">
-                    <span class="text-[#1d1d1f]">${escapeHtml(a.name)}</span>
-                    <span class="font-mono text-[#86868b]">${a.value}%</span>
-                  </div>
-                  <div class="w-full bg-[#f0f0f2] h-1.5 rounded-full overflow-hidden">
-                    <div class="bg-[#0071e3] h-full" style="width: ${a.value}%"></div>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        `;
-      } else if (selectedPanelTab === 'relationships') {
-        const neighbors = data.nearest_neighbors || [];
-        const shared = data.shared_attributes || {};
-
-        container.innerHTML = `
-          <div class="space-y-4">
-            <div>
-              <span class="text-[#86868b] font-medium block mb-2">Nearest Prototype Clusters</span>
-              <div class="space-y-2">
-                ${neighbors.map(n => `
-                  <div class="flex items-center justify-between p-2 rounded-lg bg-[#f5f5f7]">
-                    <div>
-                      <div class="font-medium text-[#1d1d1f]">${escapeHtml(n.label)}</div>
-                      <div class="text-[10px] text-[#86868b]">${escapeHtml(n.category)}</div>
-                    </div>
-                    <span class="font-mono text-emerald-600 font-semibold">${n.similarity}%</span>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-
-            <div class="border-t border-black/5 pt-3 space-y-2">
-              <span class="text-[#86868b] font-medium block">Shared PE Metadata</span>
-              <div class="bg-[#f5f5f7] p-3 rounded-xl space-y-1.5 text-[11px]">
-                <div class="flex justify-between"><span class="text-[#86868b]">Imphash:</span><span class="font-mono text-[#1d1d1f]">${escapeHtml(shared.imphash || 'N/A')}</span></div>
-                <div class="flex justify-between"><span class="text-[#86868b]">Compiler:</span><span class="text-[#1d1d1f]">${escapeHtml(shared.compiler || 'Unknown')}</span></div>
-                <div class="flex justify-between"><span class="text-[#86868b]">Packer:</span><span class="text-[#1d1d1f]">${escapeHtml(shared.packer || 'Plain PE')}</span></div>
-              </div>
-            </div>
-          </div>
-        `;
-      } else if (selectedPanelTab === 'metadata') {
-        container.innerHTML = `
-          <div class="space-y-3">
-            <div class="bg-[#f5f5f7] p-3 rounded-xl space-y-2 text-[11px]">
-              <div><span class="text-[#86868b] block">Node Identifier:</span><span class="font-mono text-[#1d1d1f]">${escapeHtml(node.id)}</span></div>
-              <div><span class="text-[#86868b] block">Parser Engine:</span><span class="font-medium text-[#1d1d1f]">ThreatWeaver Defensive PE Parser v1.0</span></div>
-              <div><span class="text-[#86868b] block">Inference Duration:</span><span class="font-mono text-[#1d1d1f]">${(node.scan_duration_ms || 14.2).toFixed(2)} ms</span></div>
-              <div><span class="text-[#86868b] block">Full Path:</span><span class="font-mono text-[10px] break-all text-[#1d1d1f]">${escapeHtml(node.file_path || 'In-Memory Reference')}</span></div>
-            </div>
-
-            <div class="pt-2">
-              <button onclick="exportSampleJson('${escapeHtml(node.id)}')" class="apple-btn-secondary w-full py-2 text-xs font-medium">Export JSON Audit Record</button>
-            </div>
-          </div>
-        `;
-      }
-    }
-
-    function getVerdictBadgeHtml(verdict) {
-      if (!verdict) return '<span class="text-gray-500">—</span>';
-      if (verdict.includes('Benign')) {
-        return '<span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">Likely Benign</span>';
-      } else if (verdict.includes('Suspicious')) {
-        return '<span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">Suspicious</span>';
-      } else if (verdict.includes('Unfamiliar')) {
-        return '<span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">Unfamiliar (OOD)</span>';
-      }
-      return `<span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">${escapeHtml(verdict)}</span>`;
-    }
-
-    // ==========================================
-    // FAMILY EXPLORER & TIMELINE LOADERS
-    // ==========================================
-    async function loadFamiliesList() {
-      try {
-        const resp = await fetch('/api/families');
-        const data = await resp.json();
-        const container = document.getElementById('familyCardsContainer');
-        if (!data.families) return;
-
-        let html = '';
-        data.families.forEach(f => {
-          html += `
-            <div class="apple-card p-5 space-y-3 hover:shadow-md transition-shadow">
-              <div class="flex items-center justify-between">
-                <span class="text-xs px-2.5 py-0.5 rounded-full font-medium" style="background-color: ${f.color}15; color: ${f.color};">${escapeHtml(f.threat_type || f.category)}</span>
-                <span class="text-[11px] text-[#86868b] font-mono">${f.sample_count} samples</span>
-              </div>
-              <h3 class="text-base font-semibold text-[#1d1d1f]">${escapeHtml(f.name)}</h3>
-              <p class="text-xs text-[#515154] leading-relaxed">${escapeHtml(f.description)}</p>
-              
-              <div class="pt-2 border-t border-black/5 space-y-1 text-[11px]">
-                <div class="flex justify-between text-[#86868b]"><span>Section Entropy:</span><span class="font-mono text-[#1d1d1f]">${f.entropy_mean}</span></div>
-                <div class="text-[#86868b]">Dominant APIs: <span class="text-[#1d1d1f] font-mono">${f.dominant_apis.slice(0, 3).join(', ')}</span></div>
-              </div>
-
-              <button onclick="focusFamilyInNetwork('${escapeHtml(f.id)}')" class="apple-btn-secondary w-full py-1.5 text-xs font-medium text-[#0071e3] mt-2">
-                Inspect in Threat Network
-              </button>
-            </div>
-          `;
-        });
-        container.innerHTML = html;
-      } catch (err) {
-        console.error('Failed to load families:', err);
-      }
-    }
-
-    function focusFamilyInNetwork(familyId) {
-      navigateTab('network');
-      const node = graphData.nodes.find(n => n.id === familyId);
-      if (node) selectNode(node);
-    }
-
-    async function loadTimelineData() {
-      try {
-        const resp = await fetch('/api/timeline');
-        const data = await resp.json();
-
-        // Render batches grid
-        const bGrid = document.getElementById('timelineBatchesGrid');
-        if (data.batches) {
-          bGrid.innerHTML = data.batches.map(b => `
-            <div class="bg-[#f5f5f7] p-3 rounded-xl space-y-1.5 text-xs">
-              <div class="font-semibold text-[#1d1d1f]">${escapeHtml(b.batch_id)}</div>
-              <div class="text-[10px] text-[#86868b] font-mono">${escapeHtml(b.partition_date)}</div>
-              <div class="text-[11px] text-[#515154]">${escapeHtml(b.description)}</div>
-              <div class="pt-1 text-[10px] text-blue-600 font-medium">${b.new_families.join(', ')}</div>
-            </div>
-          `).join('');
-        }
-
-        // Render strategy table
-        const tbody = document.getElementById('timelineStrategyTableBody');
-        if (data.strategies) {
-          let rows = '';
-          for (const [k, v] of Object.entries(data.strategies)) {
-            rows += `
-              <tr class="hover:bg-[#f9f9fb]">
-                <td class="py-3 px-6 font-medium text-[#1d1d1f]">${escapeHtml(v.name || k)}</td>
-                <td class="py-3 px-4 text-emerald-600 font-medium">${(v.macro_f1_mean || 1.0).toFixed(3)}</td>
-                <td class="py-3 px-4 text-emerald-600">${(v.forgetting_mean || 0.0).toFixed(3)}</td>
-                <td class="py-3 px-4 text-emerald-600">${(v.bwt_mean || 0.0).toFixed(3)}</td>
-                <td class="py-3 px-4 text-emerald-600">${((v.fpr_mean || 0.0) * 100).toFixed(2)}%</td>
-                <td class="py-3 px-6 text-[#86868b]">${(v.time_sec_mean || 1.8).toFixed(2)}s</td>
-              </tr>
-            `;
-          }
-          tbody.innerHTML = rows;
-        }
-      } catch (err) {
-        console.error('Failed to load timeline:', err);
-      }
-    }
-
-    // ==========================================
-    // SCANNER & PROGRESS LOGIC
-    // ==========================================
-    function setTarget(path) {
-      document.getElementById('targetPath').value = path;
-    }
-
-    async function startScan() {
-      const target = document.getElementById('targetPath').value.trim();
-      const allFiles = document.getElementById('chkAllFiles').checked;
-
-      document.getElementById('btnStartScan').classList.add('hidden');
-      document.getElementById('btnCancelScan').classList.remove('hidden');
-      document.getElementById('progressContainer').classList.remove('hidden');
-
-      try {
-        const resp = await fetch('/api/scan', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ target_path: target, all_files: allFiles })
-        });
-        const data = await resp.json();
-        if (resp.ok) {
-          startPolling();
-        } else {
-          alert('Scan error: ' + (data.error || 'Unknown'));
-          resetScanUI();
-        }
-      } catch (err) {
-        alert('Failed to connect to scanner service: ' + err);
-        resetScanUI();
-      }
-    }
-
-    function startPolling() {
-      if (pollInterval) clearInterval(pollInterval);
-      pollInterval = setInterval(async () => {
-        try {
-          const resp = await fetch('/api/scan/progress');
-          const data = await resp.json();
-
-          const completed = data.completed || 0;
-          const total = data.total || 0;
-          const pct = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
-          document.getElementById('progressBar').style.width = pct + '%';
-          document.getElementById('progressCountText').innerText = `${completed} / ${total} files (${pct}%)`;
-          document.getElementById('progressFileText').innerText = data.current_file ? 'Scanning: ' + data.current_file : 'Scanning...';
-
-          if (data.results) {
-            currentResults = data.results;
-            renderScanResultsTable(data.results);
-          }
-
-          if (!data.is_scanning) {
-            clearInterval(pollInterval);
-            pollInterval = null;
-            resetScanUI();
-            refreshSystemStatus();
-            loadThreatNetworkData();
-          }
-        } catch (e) {
-          console.error(e);
-        }
-      }, 350);
-    }
-
-    async function cancelScan() {
-      await fetch('/api/scan/cancel', { method: 'POST' });
-      resetScanUI();
-    }
-
-    function resetScanUI() {
-      document.getElementById('btnStartScan').classList.remove('hidden');
-      document.getElementById('btnCancelScan').classList.add('hidden');
-      document.getElementById('progressFileText').innerText = 'Completed';
-    }
-
-    function renderScanResultsTable(results) {
-      const tbody = document.getElementById('scanResultsTableBody');
-      if (!results || results.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="py-12 text-center text-[#86868b]">No files matched criteria.</td></tr>';
-        return;
-      }
-
-      let rows = '';
-      results.forEach((r, idx) => {
-        const badge = getVerdictBadgeHtml(r.verdict);
-        const probText = (r.malware_probability * 100).toFixed(1) + '%';
-        const shaShort = r.sha256 ? r.sha256.substring(0, 10) + '...' : 'N/A';
-
-        rows += `
-          <tr class="hover:bg-[#f9f9fb] transition-colors">
-            <td class="py-3 px-6 font-medium text-[#1d1d1f] font-mono text-[11px]">${escapeHtml(r.file_name)}</td>
-            <td class="py-3 px-4">${badge}</td>
-            <td class="py-3 px-4 font-mono font-medium">${probText}</td>
-            <td class="py-3 px-4 font-mono">${(r.novelty_score || 0).toFixed(3)}</td>
-            <td class="py-3 px-4 font-mono text-[#86868b]">${shaShort}</td>
-            <td class="py-3 px-6 text-right space-x-2">
-              <button onclick="inspectScanResult(${idx})" class="text-[#0071e3] hover:underline">Inspect</button>
-              ${r.verdict === 'Suspicious' ? `<button onclick="promptQuarantine('${escapeHtml(r.file_path)}')" class="text-amber-600 hover:underline font-medium">Quarantine</button>` : ''}
-            </td>
-          </tr>
-        `;
-      });
-      tbody.innerHTML = rows;
-    }
-
-    function renderOverviewRecentTable() {
-      const tbody = document.getElementById('overviewRecentTableBody');
-      if (!graphData.nodes || graphData.nodes.length === 0) return;
-
-      const samples = graphData.nodes.filter(n => n.type === 'sample').slice(0, 5);
-      if (samples.length === 0) return;
-
-      tbody.innerHTML = samples.map(s => `
-        <tr class="hover:bg-[#f9f9fb]">
-          <td class="py-2 font-mono text-[11px] text-[#1d1d1f]">${escapeHtml(s.label)}</td>
-          <td class="py-2">${getVerdictBadgeHtml(s.verdict)}</td>
-          <td class="py-2 font-mono">${((s.risk || 0) * 100).toFixed(0)}%</td>
-          <td class="py-2 text-right">
-            <button onclick="focusSampleInNetwork('${escapeHtml(s.id)}')" class="text-[#0071e3] hover:underline">Inspect</button>
-          </td>
-        </tr>
-      `).join('');
-    }
-
-    function focusSampleInNetwork(nodeId) {
-      navigateTab('network');
-      const node = graphData.nodes.find(n => n.id === nodeId);
-      if (node) selectNode(node);
-    }
-
-    function inspectScanResult(idx) {
-      const r = currentResults[idx];
-      if (!r) return;
-      document.getElementById('modalFileName').innerText = r.file_name;
-      document.getElementById('modalBody').innerHTML = `
-        <div class="space-y-3">
-          <div><span class="text-[#86868b]">Path:</span> <code class="font-mono text-[11px]">${escapeHtml(r.file_path)}</code></div>
-          <div class="grid grid-cols-2 gap-2 bg-[#f5f5f7] p-3 rounded-xl">
-            <div><span class="text-[#86868b]">Verdict:</span> <strong>${escapeHtml(r.verdict)}</strong></div>
-            <div><span class="text-[#86868b]">Risk:</span> ${(r.malware_probability * 100).toFixed(1)}%</div>
-            <div><span class="text-[#86868b]">Novelty:</span> ${(r.novelty_score || 0).toFixed(3)}</div>
-            <div><span class="text-[#86868b]">Duration:</span> ${(r.scan_duration_ms || 0).toFixed(1)} ms</div>
-          </div>
-          <div>
-            <span class="text-[#86868b] block mb-1">Attribution:</span>
-            <ul class="list-disc pl-4 space-y-1">${r.evidence_points.map(e => `<li>${escapeHtml(e)}</li>`).join('')}</ul>
-          </div>
-        </div>
-      `;
-      document.getElementById('detailModal').classList.remove('hidden');
-    }
-
-    function closeModal() {
-      document.getElementById('detailModal').classList.add('hidden');
-    }
-
-    // ==========================================
-    // QUARANTINE VAULT & HISTORY
-    // ==========================================
-    function promptQuarantine(path) {
-      pendingQuarantinePath = path;
-      document.getElementById('quarantineModalPath').innerText = path;
-      document.getElementById('quarantineModal').classList.remove('hidden');
-    }
-
-    function closeQuarantineModal() {
-      document.getElementById('quarantineModal').classList.add('hidden');
-      pendingQuarantinePath = null;
-    }
-
-    async function executeQuarantine() {
-      if (!pendingQuarantinePath) return;
-      try {
-        const resp = await fetch('/api/quarantine', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ file_path: pendingQuarantinePath, reason: 'Quarantined via Master UI' })
-        });
-        const data = await resp.json();
-        closeQuarantineModal();
-        if (resp.ok) {
-          alert('Successfully isolated file to quarantine vault.');
-          loadQuarantineList();
-          refreshSystemStatus();
-        } else {
-          alert('Quarantine error: ' + (data.error || 'Unknown'));
-        }
-      } catch (err) {
-        alert('Failed to execute quarantine: ' + err);
-      }
-    }
-
-    async function loadQuarantineList() {
-      const tbody = document.getElementById('quarantineTableBody');
-      tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-[#86868b]">Loading vault records...</td></tr>';
-      try {
-        const resp = await fetch('/api/quarantine');
-        const data = await resp.json();
-        if (!data.entries || data.entries.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-[#86868b]">Quarantine vault is currently empty.</td></tr>';
-          return;
-        }
-        let rows = '';
-        data.entries.forEach(e => {
-          rows += `
-            <tr class="hover:bg-[#f9f9fb]">
-              <td class="py-3 px-6 font-mono text-[11px] text-[#0071e3]">${escapeHtml(e.quarantine_id)}</td>
-              <td class="py-3 px-4 font-medium">${escapeHtml(e.original_filename)}</td>
-              <td class="py-3 px-4 text-[#86868b] max-w-xs truncate" title="${escapeHtml(e.original_path)}">${escapeHtml(e.original_path)}</td>
-              <td class="py-3 px-4">${e.restored ? '<span class="text-emerald-600 font-medium">Restored</span>' : '<span class="text-rose-600 font-medium">Isolated</span>'}</td>
-              <td class="py-3 px-4 text-[#86868b]">${escapeHtml(e.quarantined_at)}</td>
-              <td class="py-3 px-6 text-right">
-                ${!e.restored ? `<button onclick="restoreQuarantinedFile('${escapeHtml(e.quarantine_id)}')" class="apple-btn-secondary px-3 py-1 text-xs text-emerald-700 hover:bg-emerald-50">Restore</button>` : '—'}
-              </td>
-            </tr>
-          `;
-        });
-        tbody.innerHTML = rows;
-      } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-rose-600">Failed to load records.</td></tr>';
-      }
-    }
-
-    async function restoreQuarantinedFile(qid) {
-      if (!confirm(`Restore quarantined item '${qid}' back to original disk location?`)) return;
-      try {
-        const resp = await fetch('/api/restore', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ quarantine_id: qid })
-        });
-        const data = await resp.json();
-        if (resp.ok) {
-          alert('File restored: ' + data.restored_path);
-          loadQuarantineList();
-          refreshSystemStatus();
-        } else {
-          alert('Restore error: ' + (data.error || 'Unknown error'));
-        }
-      } catch (err) {
-        alert('Failed to restore: ' + err);
-      }
-    }
-
-    async function loadHistoryList() {
-      const tbody = document.getElementById('historyTableBody');
-      try {
-        const resp = await fetch('/api/history');
-        const data = await resp.json();
-        if (!data.history || data.history.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-[#86868b]">No past scans recorded yet.</td></tr>';
-          return;
-        }
-        let rows = '';
-        data.history.reverse().forEach(h => {
-          const s = h.summary || {};
-          rows += `
-            <tr class="hover:bg-[#f9f9fb]">
-              <td class="py-3 px-6 font-mono text-[11px] text-[#0071e3]">${escapeHtml(h.scan_id)}</td>
-              <td class="py-3 px-4 text-[#86868b]">${escapeHtml(h.timestamp)}</td>
-              <td class="py-3 px-4 max-w-xs truncate" title="${escapeHtml(h.target_path)}">${escapeHtml(h.target_path)}</td>
-              <td class="py-3 px-4 text-[#86868b]">${h.duration_seconds || 0}s</td>
-              <td class="py-3 px-4 font-medium">${s.total_scanned || 0}</td>
-              <td class="py-3 px-4 font-medium text-amber-600">${s.suspicious || 0}</td>
-              <td class="py-3 px-6 text-right">
-                <button onclick="exportSingleReport('${escapeHtml(h.scan_id)}')" class="text-[#0071e3] hover:underline">JSON</button>
-              </td>
-            </tr>
-          `;
-        });
-        tbody.innerHTML = rows;
-      } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-rose-600">Failed to load history.</td></tr>';
-      }
-    }
-
-    // ==========================================
-    // SETTINGS & EXPORT UTILITIES
-    // ==========================================
-    function updateThresholdDisplay(val) {
-      document.getElementById('settingThresholdValue').innerText = parseFloat(val).toFixed(2);
-    }
-
-    async function saveSettings() {
-      const thresh = parseFloat(document.getElementById('settingThresholdSlider').value);
-      const workers = parseInt(document.getElementById('settingWorkersSelect').value);
-      try {
-        const resp = await fetch('/api/settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ novelty_threshold: thresh, max_workers: workers })
-        });
-        if (resp.ok) {
-          alert('Settings successfully updated.');
-          refreshSystemStatus();
-        }
-      } catch (err) {
-        alert('Failed to save settings: ' + err);
-      }
-    }
-
-    function handleGlobalSearchKey(e) {
-      if (e.key === 'Enter') {
-        const query = e.target.value.trim().toLowerCase();
-        if (!query) return;
-
-        // Search nodes in Threat Network
-        const match = graphData.nodes.find(n => {
-          return n.label.toLowerCase().includes(query) || (n.sha256 && n.sha256.toLowerCase().includes(query)) || n.id.toLowerCase().includes(query);
-        });
-
-        if (match) {
-          navigateTab('network');
-          selectNode(match);
-        } else {
-          alert(`No sample or family matching "${query}" found.`);
-        }
-      }
-    }
-
-    function exportReport(format) {
-      if (currentResults.length === 0) {
-        alert('No active scan results to export.');
-        return;
-      }
-      let content = '';
-      if (format === 'json') {
-        content = JSON.stringify(currentResults, null, 2);
-      } else {
-        content = '# ThreatWeaver Scan Report\\n\\n| File Name | Verdict | Probability | SHA-256 |\\n|---|---|---|---|\\n';
-        currentResults.forEach(r => {
-          content += `| ${r.file_name} | ${r.verdict} | ${(r.malware_probability * 100).toFixed(1)}% | ${r.sha256} |\\n`;
-        });
-      }
-      downloadFile(content, 'threatweaver_report.' + format, format === 'json' ? 'application/json' : 'text/markdown');
-    }
-
-    function exportSampleJson(nodeId) {
-      const node = graphData.nodes.find(n => n.id === nodeId) || selectedNode;
-      if (!node) return;
-      downloadFile(JSON.stringify(node, null, 2), `threatweaver_${node.label}.json`, 'application/json');
-    }
-
-    function copyToClipboard(text) {
-      navigator.clipboard.writeText(text).then(() => {
-        alert('Copied to clipboard: ' + text);
-      });
-    }
-
-    function downloadFile(content, filename, mime) {
-      const blob = new Blob([content], { type: mime });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-
-    function escapeHtml(str) {
-      if (!str) return '';
-      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
-  </script>
-</body>
-</html>
-"""
-
-
-def run_server(
+def create_server(
+    host: str = "127.0.0.1",
     port: int = DEFAULT_PORT,
     checkpoint_path: Optional[str | Path] = None,
-    open_browser: bool = True,
-) -> None:
-    """Launches the ThreatWeaver local HTTP server."""
+) -> tuple[ThreadingHTTPServer, str]:
+    """Configures and instantiates the ThreatWeaver HTTP server instance."""
     ckpt = Path(checkpoint_path) if checkpoint_path else DEFAULT_CHECKPOINT
     engine = InferenceEngine(checkpoint_path=ckpt if ckpt.is_file() else None)
     state_mgr = ScanStateManager(inference_engine=engine)
     quarantine_mgr = QuarantineManager()
 
     # Bind handlers
+    adaptation_svc = AdaptationService(engine=engine)
     ThreatWeaverRequestHandler.state_mgr = state_mgr
     ThreatWeaverRequestHandler.engine = engine
     ThreatWeaverRequestHandler.quarantine_mgr = quarantine_mgr
+    ThreatWeaverRequestHandler.adaptation_svc = adaptation_svc
 
-    server = ThreadingHTTPServer(("127.0.0.1", port), ThreatWeaverRequestHandler)
-    url = f"http://127.0.0.1:{port}"
+    server = ThreadingHTTPServer((host, port), ThreatWeaverRequestHandler)
+    url = f"http://{host}:{port}"
+    return server, url
+
+
+def run_server(
+    host: str = "127.0.0.1",
+    port: int = DEFAULT_PORT,
+    checkpoint_path: Optional[str | Path] = None,
+    open_browser: bool = True,
+) -> None:
+    """Launches the ThreatWeaver local HTTP server."""
+    server, url = create_server(host=host, port=port, checkpoint_path=checkpoint_path)
 
     print(f"\nThreatWeaver Apple Minimalist UI running at: {url}")
     print("Press Ctrl+C to stop the server.\n")

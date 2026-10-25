@@ -6,11 +6,19 @@ from threatweaver.models.classifier import (
     ThreatModelOutput,
     save_checkpoint,
     load_checkpoint,
+    verify_checkpoint_file,
+    compute_checkpoint_signature,
 )
 from threatweaver.models.novelty import (
     NoveltyDetector,
     NoveltyAssessment,
     PrototypeCluster,
+)
+from threatweaver.models.calibration import (
+    TemperatureScaler,
+    calibrate_temperature,
+    compute_ece,
+    compute_brier_score,
 )
 
 __all__ = [
@@ -20,7 +28,13 @@ __all__ = [
     "ThreatModelOutput",
     "save_checkpoint",
     "load_checkpoint",
+    "verify_checkpoint_file",
+    "compute_checkpoint_signature",
     "NoveltyDetector",
     "NoveltyAssessment",
     "PrototypeCluster",
+    "TemperatureScaler",
+    "calibrate_temperature",
+    "compute_ece",
+    "compute_brier_score",
 ]

@@ -1,0 +1,63 @@
+{
+  "LogisticRegression": {
+    "accuracy": 0.871,
+    "balanced_accuracy": 0.871,
+    "precision": 0.8744952893674294,
+    "recall": 0.8663333333333333,
+    "macro_f1": 0.8709971906054843,
+    "roc_auc": 0.9285255000000001,
+    "pr_auc": 0.9186531833670698,
+    "detection_rate_at_1pct_fpr": 0.23766666666666666,
+    "fpr_at_95pct_recall": 0.2976666666666667,
+    "brier_score": 0.09878908097743988,
+    "ece": 0.016437595417102185,
+    "train_time_sec": 0.08201122283935547,
+    "inference_latency_ms": 0.00016637643178304035
+  },
+  "RandomForest": {
+    "accuracy": 0.9061666666666667,
+    "balanced_accuracy": 0.9061666666666667,
+    "precision": 0.8876869233216672,
+    "recall": 0.93,
+    "macro_f1": 0.9061133364337982,
+    "roc_auc": 0.9639469444444444,
+    "pr_auc": 0.958774373508956,
+    "detection_rate_at_1pct_fpr": 0.41,
+    "fpr_at_95pct_recall": 0.15066666666666667,
+    "brier_score": 0.07495135484429861,
+    "ece": 0.0544030666867981,
+    "train_time_sec": 0.34293293952941895,
+    "inference_latency_ms": 0.009372512499491373
+  },
+  "HistGradientBoosting": {
+    "accuracy": 0.915,
+    "balanced_accuracy": 0.915,
+    "precision": 0.9042207792207793,
+    "recall": 0.9283333333333333,
+    "macro_f1": 0.9149848862019914,
+    "roc_auc": 0.9705290000000002,
+    "pr_auc": 0.9681902117069028,
+    "detection_rate_at_1pct_fpr": 0.547,
+    "fpr_at_95pct_recall": 0.12333333333333334,
+    "brier_score": 0.06619510634788668,
+    "ece": 0.032604117989992694,
+    "train_time_sec": 2.552717685699463,
+    "inference_latency_ms": 0.0040901899337768555
+  },
+  "ThreatWeaver_ResMLP": {
+    "accuracy": 0.895,
+    "balanced_accuracy": 0.895,
+    "precision": 0.9003378378378378,
+    "recall": 0.8883333333333333,
+    "macro_f1": 0.8949953331259166,
+    "roc_auc": 0.9526214444444443,
+    "pr_auc": 0.9427502090241775,
+    "detection_rate_at_1pct_fpr": 0.30733333333333335,
+    "fpr_at_95pct_recall": 0.159,
+    "brier_score": 0.08399975299835205,
+    "ece": 0.05363358563184739,
+    "train_time_sec": 7.144734144210815,
+    "inference_latency_ms": 0.0016639232635498047,
+    "parameter_count": 112098
+  }
+}

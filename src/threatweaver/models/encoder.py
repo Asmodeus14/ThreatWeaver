@@ -37,7 +37,7 @@ class ThreatEncoder(nn.Module):
         self,
         input_dim: int = 256,
         hidden_dims: List[int] | None = None,
-        embedding_dim: int = 32,
+        embedding_dim: int = 128,
         dropout: float = 0.2,
     ):
         super().__init__()

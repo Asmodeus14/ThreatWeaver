@@ -33,7 +33,7 @@ def test_scan_service_directory_execution(tmp_path: Path):
     assert report.summary.total_scanned == 2
     assert len(progress_reports) == 2
     assert any(r.verdict == ScanVerdict.UNSUPPORTED for r in report.results)
-    assert any(r.verdict in (ScanVerdict.LIKELY_BENIGN, ScanVerdict.SUSPICIOUS) for r in report.results)
+    assert any(r.verdict in (ScanVerdict.LIKELY_BENIGN, ScanVerdict.SUSPICIOUS, ScanVerdict.UNFAMILIAR) for r in report.results)
 
 
 def test_scan_service_cancellation(tmp_path: Path):
@@ -78,3 +78,16 @@ def test_report_export_and_history(tmp_path: Path):
     history = hist_mgr.load_history()
     assert len(history) == 1
     assert history[0]["scan_id"] == report.scan_id
+
+
+def test_full_system_scan_discovery_and_roots():
+    """Validates root drive detection and full system discovery behavior."""
+    roots = ScanService.get_system_scan_roots()
+    assert len(roots) >= 1
+    assert any(str(r).startswith("C") or str(r) == "/" for r in roots)
+
+    service = ScanService(inference_engine=InferenceEngine(), max_workers=1)
+    # Cancel immediately so it doesn't walk the entire drive in unit tests
+    service.cancel()
+    discovered = service.discover_files("FULL_SYSTEM")
+    assert isinstance(discovered, list)

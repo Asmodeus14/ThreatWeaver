@@ -1,0 +1,40 @@
+{
+  "dataset": "EMBER2024",
+  "verified": true,
+  "location": "C:\\CODE\\ThreatWeaver\\data\\ember2024",
+  "jsonl_files_count": 100,
+  "total_bytes": 17817556332,
+  "samples": 1086315,
+  "benign": 540000,
+  "malicious": 546315,
+  "unlabeled": 0,
+  "corrupt_records": 0,
+  "features": 2381,
+  "time_span": [
+    "2023-09",
+    "2024-12"
+  ],
+  "file_types": {
+    "Win32": 723225,
+    "ELF": 386,
+    "PDF": 805,
+    "Win64": 240814,
+    "Dot_Net": 120829,
+    "APK": 256
+  },
+  "sample_hashes_preview": [
+    "058f63432dd8f679aef17b6fa16dd513273f10d8512f9897fa850585ea1d6d02",
+    "0f53e1c872f0bd9dd2331680d1d81698f3f5907a19adebbd76350e62c870b4b3",
+    "0f7266c5fe7b150d6cc1ebd77c3bce74a385daf00dee8cded355ee331c729b69",
+    "19e0f1b9dc4621243ca321e31566702552ec41a6fca42592fabe006c52060781",
+    "1fcb198b21155a59da3822fd87f6ebd8de2db4ad2cc90e93b28527e6ee9c3f9f",
+    "22bca2848466cfe457dad5124970527d1b3d37df61cdb6663b6ba9ac71b30fc4",
+    "28427c9aff6079442bcd42ef82d0f1df904c36ee26edf03e4a1414a9e30adc9a",
+    "2ae63272ddd315f943c122c6d4519f2180964a66e4a765231877027f58820c70",
+    "2cfde28a8df3a9925cd116df65ec7862aaff8f10fae5dfb9b4eb30508705daa4",
+    "36f86daae16fdf01fd5678312d0bf48957433597dd49634c3c66ec20bcd3cbc3"
+  ],
+  "manifest_timestamp": "2026-10-21 15:19:00",
+  "license": "Apache-2.0",
+  "source": "https://huggingface.co/datasets/joyce8/EMBER2024"
+}

@@ -7,15 +7,15 @@ __pycache__/
 dist/
 build/
 
-# ThreatWeaver Data & Models
+# ThreatWeaver Raw Datasets & Large Archives
 data/
-*.pt
-*.pth
-*.onnx
-*.bin
+*.zip
+
+# Runtime Storage & User State
 quarantine_store/
 reports/scan_*.json
-artifacts/
+.threatweaver/
+.chrome_profile_ss/
 
 # Testing & Coverage
 .pytest_cache/

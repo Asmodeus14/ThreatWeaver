@@ -86,38 +86,28 @@ class PEAnalysisResult:
     error_message: Optional[str] = None
 
 
+import numpy as np
+
 def compute_shannon_entropy(data: bytes) -> float:
-    """Computes Shannon entropy (0.0 - 8.0 bits per byte) for arbitrary byte buffer."""
+    """Computes Shannon entropy (0.0 - 8.0 bits per byte) via fast C/NumPy bincount."""
     if not data:
         return 0.0
-    length = len(data)
-    frequencies = [0] * 256
-    for b in data:
-        frequencies[b] += 1
-    entropy = 0.0
-    for count in frequencies:
-        if count > 0:
-            p = count / length
-            entropy -= p * math.log2(p)
-    return float(entropy)
+    arr = np.frombuffer(data, dtype=np.uint8)
+    counts = np.bincount(arr, minlength=256)
+    non_zero = counts[counts > 0]
+    p = non_zero / float(len(data))
+    return float(-np.sum(p * np.log2(p)))
 
 
 def compute_byte_histogram(data: bytes, num_bins: int = 64) -> List[float]:
-    """Generates a compressed, L1-normalized byte histogram (default 64 bins)."""
+    """Generates a compressed, L1-normalized byte histogram via vectorized NumPy grouping."""
     if not data:
         return [0.0] * num_bins
-    counts = [0] * 256
-    for b in data:
-        counts[b] += 1
-    
-    # Group 256 bins into num_bins (e.g. 256 / 64 = 4 bytes per bin)
+    arr = np.frombuffer(data, dtype=np.uint8)
+    counts = np.bincount(arr, minlength=256)
     step = 256 // num_bins
-    grouped = [0.0] * num_bins
-    for i in range(num_bins):
-        grouped[i] = sum(counts[i * step : (i + 1) * step])
-    
-    total = float(len(data))
-    return [c / total for c in grouped]
+    grouped = counts.reshape(num_bins, step).sum(axis=1)
+    return (grouped / float(len(data))).tolist()
 
 
 class StaticPEParser:
@@ -165,7 +155,9 @@ class StaticPEParser:
 
         return file_size
 
-    def parse(self, file_path: str | Path) -> PEAnalysisResult:
+    def parse(
+        self, file_path: str | Path, raw_data: Optional[bytes] = None
+    ) -> PEAnalysisResult:
         """Parses a PE file and extracts structural metadata without execution."""
         path = Path(file_path).resolve()
         anomalies: List[str] = []
@@ -201,8 +193,11 @@ class StaticPEParser:
                 error_message=str(e),
             )
 
-        with open(path, "rb") as f:
-            file_bytes = f.read(self.max_file_size)
+        if raw_data is not None:
+            file_bytes = raw_data[: self.max_file_size]
+        else:
+            with open(path, "rb") as f:
+                file_bytes = f.read(self.max_file_size)
 
         sha256 = hashlib.sha256(file_bytes).hexdigest()
         md5 = hashlib.md5(file_bytes).hexdigest()

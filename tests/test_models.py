@@ -52,6 +52,9 @@ def test_save_and_load_checkpoint(tmp_path: Path):
         novelty_threshold=0.45,
     )
 
+    # Verify signature file was created
+    assert ckpt_path.with_suffix(".pt.sig").is_file()
+
     loaded_model, meta = load_checkpoint(ckpt_path, device="cpu")
     assert meta["schema_version"] == "1.0"
     assert meta["novelty_threshold"] == 0.45
@@ -64,6 +67,53 @@ def test_save_and_load_checkpoint(tmp_path: Path):
         out1 = model(test_x)
         out2 = loaded_model(test_x)
     assert torch.allclose(out1.logits, out2.logits, atol=1e-6)
+
+
+def test_checkpoint_tamper_detection(tmp_path: Path):
+    """Verifies that tampering with checkpoint payload causes HMAC integrity failure."""
+    model = ThreatClassifier(input_dim=256, num_classes=2)
+    ckpt_path = tmp_path / "tampered.pt"
+
+    save_checkpoint(model=model, save_path=ckpt_path)
+    sig_path = ckpt_path.with_suffix(".pt.sig")
+    assert sig_path.is_file()
+
+    # Tamper with checkpoint bytes
+    with open(ckpt_path, "r+b") as f:
+        f.seek(10)
+        original_byte = f.read(1)
+        f.seek(10)
+        f.write(bytes([(original_byte[0] ^ 0xFF)]))
+
+    with pytest.raises(ValueError, match="integrity verification failed"):
+        load_checkpoint(ckpt_path)
+
+
+def test_checkpoint_signature_mismatch(tmp_path: Path):
+    """Verifies that an invalid signature causes load_checkpoint to fail."""
+    model = ThreatClassifier(input_dim=256, num_classes=2)
+    ckpt_path = tmp_path / "bad_sig.pt"
+
+    save_checkpoint(model=model, save_path=ckpt_path)
+    sig_path = ckpt_path.with_suffix(".pt.sig")
+    sig_path.write_text("0000000000000000000000000000000000000000000000000000000000000000")
+
+    with pytest.raises(ValueError, match="integrity verification failed"):
+        load_checkpoint(ckpt_path)
+
+
+def test_unsigned_checkpoint_warning(tmp_path: Path):
+    """Verifies that loading an unsigned checkpoint emits a warning."""
+    model = ThreatClassifier(input_dim=256, num_classes=2)
+    ckpt_path = tmp_path / "unsigned.pt"
+
+    save_checkpoint(model=model, save_path=ckpt_path, sign=False)
+    sig_path = ckpt_path.with_suffix(".pt.sig")
+    assert not sig_path.exists()
+
+    with pytest.warns(UserWarning, match="Loading unsigned checkpoint"):
+        loaded, _ = load_checkpoint(ckpt_path)
+        assert loaded is not None
 
 
 def test_novelty_detector_calibration_and_evaluation():

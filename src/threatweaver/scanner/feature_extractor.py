@@ -96,18 +96,18 @@ class FeatureExtractor:
         self.parser = StaticPEParser()
 
     def extract_from_file(self, file_path: str | Path) -> ExtractedFeatures:
-        """Extracts 256-dim feature vector from given file path."""
+        """Extracts 256-dim feature vector from given file path with single-pass I/O."""
         path = Path(file_path).resolve()
-        analysis = self.parser.parse(path)
 
-        # Read small sample of bytes for string/byte statistical analysis
+        # Read once from disk up to max configured file size
         raw_bytes = b""
         try:
             with open(path, "rb") as f:
-                raw_bytes = f.read(10 * 1024 * 1024)  # sample first 10MB max
+                raw_bytes = f.read(self.parser.max_file_size)
         except Exception:
             pass
 
+        analysis = self.parser.parse(path, raw_data=raw_bytes if raw_bytes else None)
         return self.extract_from_pe_analysis(analysis, raw_bytes)
 
     def extract_from_pe_analysis(
@@ -285,15 +285,39 @@ class FeatureExtractor:
 
         # String and content analysis from raw_bytes
         if raw_bytes:
-            # Printable ASCII ratio
-            printable = sum(1 for b in raw_bytes if 32 <= b <= 126 or b in (9, 10, 13))
-            ascii_ratio = printable / max(len(raw_bytes), 1)
-            vec[224] = ascii_ratio
+            # Fast vectorized printable ASCII ratio
+            arr = np.frombuffer(raw_bytes, dtype=np.uint8)
+            printable_count = np.count_nonzero(((arr >= 32) & (arr <= 126)) | (arr == 9) | (arr == 10) | (arr == 13))
+            vec[224] = float(printable_count / max(len(raw_bytes), 1))
+
+            # Sample first 2MB for fast string extraction and pre-filtered regex matching
+            sample = raw_bytes[: 2 * 1024 * 1024]
+            ascii_strings = re.findall(rb"[\x20-\x7e]{4,}", sample)
+            joined_ascii = b" ".join(ascii_strings)
+            joined_lower = joined_ascii.lower()
+
+            pre_filters = {
+                "powershell": (b"powershell", b"bypass", b"-enc", b"-encodedcommand"),
+                "cmd": (b"cmd.exe", b"start"),
+                "url": (b"http://", b"https://"),
+                "ip": (b".",),
+                "reg_run": (b"currentversion\\run", b"currentversion/run", b"software\\microsoft"),
+                "vbs_wscript": (b"wscript", b"cscript"),
+                "base64_marker": (b"tvqqaam", b"uexpbg", b"aaoaae"),
+                "tor_onion": (b".onion",),
+            }
 
             # Search for suspicious string indicators (dims 225..232)
             s_idx = 225
             for str_name, regex in SUSPICIOUS_STRING_REGEXES.items():
-                if regex.search(raw_bytes):
+                pfs = pre_filters.get(str_name)
+                # Short-circuit if fast keyword tokens are absent
+                if pfs and not any(p in joined_lower for p in pfs):
+                    s_idx += 1
+                    continue
+
+                # Run regex on joined printable ASCII strings buffer
+                if regex.search(joined_ascii):
                     vec[s_idx] = 1.0
                     indicators.append(f"Detected suspicious string pattern: {str_name}")
                 s_idx += 1
@@ -322,6 +346,7 @@ class FeatureExtractor:
             "num_imported_functions": len(analysis.imported_functions),
             "overall_entropy": analysis.overall_entropy,
             "api_category_hits": cat_counts,
+            "structural_anomalies": list(analysis.anomalies),
         }
 
         return ExtractedFeatures(

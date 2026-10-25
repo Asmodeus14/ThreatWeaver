@@ -56,6 +56,21 @@ class NoveltyDetector:
         else:
             return float(np.linalg.norm(a - b))
 
+    def score(self, embeddings: np.ndarray) -> np.ndarray:
+        """Computes novelty scores (min distance to prototypes) for a batch of embeddings."""
+        if not self.prototypes:
+            return np.ones(len(embeddings), dtype=np.float32)
+        centroids = np.stack([p.centroid for p in self.prototypes], axis=0)
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        norms[norms < 1e-8] = 1.0
+        norm_embs = embeddings / norms
+        if self.distance_metric == "cosine":
+            sims = np.dot(norm_embs, centroids.T)
+            distances = np.maximum(0.0, 1.0 - sims)
+        else:
+            distances = np.linalg.norm(norm_embs[:, None, :] - centroids[None, :, :], axis=2)
+        return np.min(distances, axis=1)
+
     def fit_prototypes(
         self,
         embeddings: np.ndarray,
@@ -105,6 +120,50 @@ class NoveltyDetector:
                             sample_count=cluster_size,
                         )
                     )
+
+    def add_prototype(
+        self,
+        centroid: np.ndarray,
+        label: int,
+        family_name: str,
+        sample_count: int = 1,
+    ) -> PrototypeCluster:
+        """Adds or updates a prototype cluster in embedding space."""
+        norm_val = float(np.linalg.norm(centroid))
+        norm_c = centroid / (norm_val if norm_val > 1e-8 else 1.0)
+        proto = PrototypeCluster(
+            label=int(label),
+            family_name=str(family_name),
+            centroid=norm_c.astype(np.float32),
+            sample_count=sample_count,
+        )
+        self.prototypes.append(proto)
+        return proto
+
+    def to_dict_list(self) -> List[Dict[str, Any]]:
+        """Serializes prototypes for checkpoint storage."""
+        return [
+            {
+                "label": p.label,
+                "family_name": p.family_name,
+                "centroid": p.centroid.tolist(),
+                "sample_count": p.sample_count,
+            }
+            for p in self.prototypes
+        ]
+
+    def get_prototypes_summary(self) -> List[Dict[str, Any]]:
+        """Returns JSON-serializable overview of registered cluster prototypes."""
+        return [
+            {
+                "label": p.label,
+                "label_name": "Malware" if p.label == 1 else "Benign",
+                "family_name": p.family_name,
+                "sample_count": p.sample_count,
+                "dimension": len(p.centroid),
+            }
+            for p in self.prototypes
+        ]
 
     def calibrate_threshold(
         self,

@@ -130,3 +130,36 @@ def test_server_settings_api(test_server: str):
         data = json.loads(resp.read().decode("utf-8"))
         assert data.get("status") == "success"
 
+
+
+def test_server_full_system_scan_api(tmp_path: Path):
+    """Validates full system scan trigger via /api/scan."""
+    import json
+    import threading
+    import urllib.request
+    from http.server import HTTPServer
+    from threatweaver.app.server import ThreatWeaverRequestHandler, ScanStateManager
+    from threatweaver.scanner.inference import InferenceEngine
+
+    engine = InferenceEngine(checkpoint_path=None)
+    state_mgr = ScanStateManager(inference_engine=engine)
+    ThreatWeaverRequestHandler.state_mgr = state_mgr
+    ThreatWeaverRequestHandler.engine = engine
+
+    httpd = HTTPServer(("127.0.0.1", 0), ThreatWeaverRequestHandler)
+    port = httpd.server_address[1]
+    base_url = f"http://127.0.0.1:{port}"
+
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    try:
+        payload = json.dumps({"scan_mode": "full_system"}).encode("utf-8")
+        req = urllib.request.Request(f"{base_url}/api/scan", data=payload, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read().decode())
+            assert data["status"] == "started"
+            assert data["is_full_system"] is True
+            state_mgr.cancel_scan()
+    finally:
+        httpd.shutdown()
+        httpd.server_close()

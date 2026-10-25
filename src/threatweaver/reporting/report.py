@@ -174,6 +174,23 @@ class ScanHistoryManager:
             "timestamp": report.start_time,
             "duration_seconds": report.duration_seconds,
             "summary": asdict(report.summary),
+            "results": [
+                {
+                    "file_path": r.file_path,
+                    "file_name": r.file_name,
+                    "file_size_bytes": r.file_size_bytes,
+                    "sha256": r.sha256,
+                    "verdict": r.verdict.value,
+                    "malware_probability": round(r.malware_probability, 4),
+                    "novelty_score": round(r.novelty_score, 4),
+                    "is_novel": r.is_novel,
+                    "evidence_points": r.evidence_points,
+                    "scan_duration_ms": round(r.scan_duration_ms, 2),
+                    "nearest_known_cluster": r.nearest_known_cluster,
+                    "warning_message": r.warning_message,
+                }
+                for r in report.results[:100]
+            ],
         }
         history.append(summary_record)
         with open(self.history_file, "w", encoding="utf-8") as f:
