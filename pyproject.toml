@@ -42,6 +42,10 @@ ember = [
     "signify>=0.7.1,<0.8",
     "lightgbm>=4.5,<5",
 ]
+# Known-bad tier: user-supplied YARA rules (no rules are bundled)
+rules = [
+    "yara-python>=4.5,<5",
+]
 
 [project.scripts]
 threatweaver = "threatweaver.app.cli:main"

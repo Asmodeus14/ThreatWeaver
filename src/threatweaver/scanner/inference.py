@@ -85,6 +85,7 @@ class InferenceEngine:
         extraction_memory_mb: int = 1024,
         extraction_workers: int = 2,
         bundle_path: Optional[str | Path] = None,
+        rules_dir: Optional[str | Path] = None,
     ):
         self.device = torch.device(device)
         self.threshold = classification_threshold
@@ -113,6 +114,8 @@ class InferenceEngine:
             from threatweaver.models.bundle import LGBMBundle
             self.bundle = LGBMBundle.load(bundle_path)
             self.model_version = f"{self.bundle.id} (LightGBM, EMBER v3)"
+        from threatweaver.detectors.known_bad import KnownBadDetector
+        self.known_bad = KnownBadDetector(rules_dir)
 
     def load_model(self, checkpoint_path: str | Path) -> None:
         """Loads and initializes model from safe checkpoint."""
@@ -187,6 +190,7 @@ class InferenceEngine:
             except Exception:  # noqa: BLE001 - an explanation failure must not block the verdict
                 explanation = None
 
+        kb = self.known_bad.check(file_sha256, path) if parsed.get("is_pe") else None
         decision = decide(Evidence(
             parse_ok="failure" not in parsed,
             is_pe=bool(parsed.get("is_pe", True)),
@@ -196,12 +200,18 @@ class InferenceEngine:
             signature_trusted=bool(sig and sig.is_trusted),
             signer=(sig.subject if sig else None),
             is_novel=None,
+            known_bad=(kb.match if kb and not kb.allowlisted else None),
             parse_error=parsed.get("failure") or parsed.get("error"),
         ))
         evidence = list(decision.reasons)
         if explanation is not None:
             from threatweaver.explain.shap_groups import summarize
             evidence.extend(f"Model attribution: {line}" for line in summarize(explanation))
+        if kb is not None:
+            if kb.allowlisted:
+                evidence.append("Known-bad checks skipped: this SHA-256 is on your local allowlist.")
+            if kb.yara_error:
+                evidence.append(f"YARA scan error: {kb.yara_error}")
         if sig is not None:
             evidence.append(f"Authenticode: {'valid' if sig.is_trusted else 'not trusted'} ({sig.provider}; {sig.details})")
         evidence.extend(f"Static indicator: {i}" for i in parsed.get("indicators", []))
@@ -250,7 +260,8 @@ class InferenceEngine:
         if getattr(self, "bundle", None) is not None:
             from threatweaver.core.policy import POLICY_VERSION
             parts = [POLICY_VERSION, self.bundle.file_sha256(), f"tauh={self.bundle.tau_high:.6f}",
-                     f"taul={self.bundle.tau_low:.6f}", f"sig={int(self.signature_verifier.enabled)}"]
+                     f"taul={self.bundle.tau_low:.6f}", f"sig={int(self.signature_verifier.enabled)}",
+                     f"kb={self.known_bad.version}"]
             return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:32]
         parts = [
             VERDICT_POLICY_VERSION,
