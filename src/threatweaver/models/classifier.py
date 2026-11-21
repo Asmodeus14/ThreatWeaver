@@ -48,6 +48,8 @@ class ThreatClassifier(nn.Module):
         self.temperature = max(temperature, 0.01)
         self.head_input = head_input
 
+        self.hidden_dims = list(hidden_dims) if hidden_dims is not None else [256, 128]
+        self.dropout = dropout
         self.encoder = ThreatEncoder(
             input_dim=input_dim,
             hidden_dims=hidden_dims,
@@ -116,6 +118,7 @@ def save_checkpoint(
         "schema_version": SCHEMA_VERSION,
         "input_dim": model.input_dim,
         "embedding_dim": getattr(model, "embedding_dim", 32),
+        "hidden_dims": getattr(model, "hidden_dims", [256, 128]),
         "head_input": getattr(model, "head_input", "embedding"),
         "num_classes": model.num_classes,
         "state_dict": model.state_dict(),
@@ -199,8 +202,10 @@ def load_checkpoint(
     else:
         head_input = "embedding"
 
+    hidden_dims = data.get("hidden_dims") or [256, 128]  # v0.1 checkpoints predate this field
     model = ThreatClassifier(
         input_dim=input_dim,
+        hidden_dims=list(hidden_dims),
         embedding_dim=embedding_dim,
         num_classes=num_classes,
         temperature=temp,

@@ -143,8 +143,18 @@ def test_train_lgbm_smoke(tmp_path: Path):
     r = eng.analyze_file(REPO / "samples" / "suspicious_packed.exe")
     assert "LightGBM" in r.model_version and r.malware_probability > 0
     assert any("threshold" in e for e in r.evidence_points)
+    assert r.explanation is not None and r.explanation["groups"]
     assert "Cached" in eng.analyze_file(REPO / "samples" / "suspicious_packed.exe").model_version
     eng.close()
+
+    # TreeSHAP attribution is exact: contributions + bias == raw margin
+    from threatweaver.explain.shap_groups import GROUP_LABELS, explain, feature_blocks
+    assert feature_blocks()[-1][2] == 2568 and len(feature_blocks()) == len(GROUP_LABELS)
+    vec = np.asarray(load_split(out, "test")[0][0])
+    ex = explain(b.booster, vec, top_groups=20)
+    raw = float(b.booster.predict(vec.reshape(1, -1), raw_score=True)[0])
+    assert ex["raw_score"] == pytest.approx(raw, abs=1e-6)
+    assert sum(g["contribution"] for g in ex["groups"]) == pytest.approx(ex["all_groups_total"], abs=1e-6)
     X, _, _ = load_split(out, "test")
     p = b.predict_proba(X[:5])
     assert p.shape == (5,) and np.all((p >= 0) & (p <= 1))

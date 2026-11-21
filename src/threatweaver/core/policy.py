@@ -73,7 +73,7 @@ def decide(e: Evidence) -> Decision:
     if p >= e.tau_high:
         return Decision(LIKELY_MALICIOUS, [
             f"Model score {p:.1%} is at or above the high-confidence threshold {e.tau_high:.1%} "
-            f"(≈0.1% false-positive rate on validation data).{sig_note}"])
+            f"(~0.1% false-positive rate on validation data).{sig_note}"])
     if p >= e.tau_low:
         return Decision(SUSPICIOUS, [
             f"Model score {p:.1%} is between the review threshold {e.tau_low:.1%} and the high-confidence "

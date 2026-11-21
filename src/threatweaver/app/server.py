@@ -118,6 +118,7 @@ class ScanStateManager:
                     "triage_stage": triage,
                     "nearest_known_cluster": r.nearest_known_cluster,
                     "warning_message": r.warning_message,
+                    "explanation": r.explanation,
                 }
 
             latest = serialize_r(self.results[-1]) if self.results else None
@@ -542,6 +543,7 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                     "nearest_known_cluster": r.nearest_known_cluster,
                     "model_version": r.model_version,
                     "warning_message": r.warning_message,
+                    "explanation": r.explanation,
                 })
         if not samples:
             try:
@@ -817,11 +819,14 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
         for s in self._collect_scanned_samples():
             sha = s.get("sha256") or ""
             if identifier in (sha, f"s-{sha[:12]}") or (len(identifier) >= 8 and sha.startswith(identifier)):
+                expl = s.get("explanation")
                 return {
                     "available": True,
                     "sample": s,
-                    "feature_attribution": None,
-                    "feature_attribution_note": "Per-feature attribution (SHAP) is planned (roadmap 4.1) and not yet computed.",
+                    "feature_attribution": expl,
+                    "feature_attribution_note": None if expl else (
+                        "Attribution is computed by the LightGBM (v2) detector for fresh scans; this result came "
+                        "from the legacy model or the cache."),
                 }
         return {"available": False, "reason": f"No scanned sample matches '{identifier}'."}
 

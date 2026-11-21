@@ -66,6 +66,7 @@ class ScanResult:
     raw_indicators: List[str] = field(default_factory=list)
     nearest_known_cluster: Optional[str] = None
     warning_message: Optional[str] = None
+    explanation: Optional[Dict[str, Any]] = None  # grouped TreeSHAP attribution (v2 detector only)
 
 
 class InferenceEngine:
@@ -177,8 +178,14 @@ class InferenceEngine:
             sig = self.signature_verifier.verify_file(path)
 
         p_mal = None
+        explanation = None
         if parsed.get("is_pe") and parsed.get("vector") is not None:
             p_mal = float(self.bundle.predict_proba(parsed["vector"])[0])
+            try:
+                from threatweaver.explain.shap_groups import explain
+                explanation = explain(self.bundle.booster, parsed["vector"])
+            except Exception:  # noqa: BLE001 - an explanation failure must not block the verdict
+                explanation = None
 
         decision = decide(Evidence(
             parse_ok="failure" not in parsed,
@@ -192,6 +199,9 @@ class InferenceEngine:
             parse_error=parsed.get("failure") or parsed.get("error"),
         ))
         evidence = list(decision.reasons)
+        if explanation is not None:
+            from threatweaver.explain.shap_groups import summarize
+            evidence.extend(f"Model attribution: {line}" for line in summarize(explanation))
         if sig is not None:
             evidence.append(f"Authenticode: {'valid' if sig.is_trusted else 'not trusted'} ({sig.provider}; {sig.details})")
         evidence.extend(f"Static indicator: {i}" for i in parsed.get("indicators", []))
@@ -211,6 +221,7 @@ class InferenceEngine:
             raw_indicators=list(parsed.get("indicators", [])),
             nearest_known_cluster=None,
             warning_message=None if p_mal is not None else "No model score; treat as unknown, not benign.",
+            explanation=explanation,
         )
         if self.hash_cache.enabled and file_sha256:
             self.hash_cache.record_scan_result(res, fingerprint, source="LightGBM")
