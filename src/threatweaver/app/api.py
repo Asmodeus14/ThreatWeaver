@@ -109,6 +109,8 @@ class SettingsRequest(_Loose):
     enable_signature_verifier: Optional[bool] = None
     enable_hash_cache: Optional[bool] = None
     clear_cache: Optional[bool] = None
+    intel_enabled: Optional[bool] = Field(None, description="Opt in to MalwareBazaar hash lookups (hash only)")
+    intel_api_key: Optional[str] = Field(None, description="MalwareBazaar Auth-Key (write-only; stored with DPAPI)")
 
 
 GET_PATHS: List[Tuple[str, str]] = [

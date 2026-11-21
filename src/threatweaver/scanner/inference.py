@@ -118,6 +118,7 @@ class InferenceEngine:
             self.model_version = f"{self.bundle.id} (LightGBM, EMBER v3)"
         from threatweaver.detectors.known_bad import KnownBadDetector
         self.known_bad = KnownBadDetector(rules_dir)
+        self.threat_intel = None  # created lazily; opt-in only (see detectors/threat_intel.py)
 
     def load_model(self, checkpoint_path: str | Path) -> None:
         """Loads and initializes model from safe checkpoint."""
@@ -193,6 +194,15 @@ class InferenceEngine:
                 explanation = None
 
         kb = self.known_bad.check(file_sha256, path) if parsed.get("is_pe") else None
+        intel = None
+        if parsed.get("is_pe") and file_sha256:
+            from threatweaver.detectors.threat_intel import MalwareBazaarLookup, load_config
+            if load_config().get("enabled"):
+                self.threat_intel = self.threat_intel or MalwareBazaarLookup()
+                intel = self.threat_intel.lookup(file_sha256)
+        known = kb.match if kb and not kb.allowlisted else None
+        if known is None and intel is not None and intel.status == "listed":
+            known = f"MalwareBazaar listing ({intel.signature or 'unnamed family'})"
         decision = decide(Evidence(
             parse_ok="failure" not in parsed,
             is_pe=bool(parsed.get("is_pe", True)),
@@ -202,7 +212,7 @@ class InferenceEngine:
             signature_trusted=bool(sig and sig.is_trusted),
             signer=(sig.subject if sig else None),
             is_novel=None,
-            known_bad=(kb.match if kb and not kb.allowlisted else None),
+            known_bad=known,
             parse_error=parsed.get("failure") or parsed.get("error"),
         ))
         evidence = list(decision.reasons)
@@ -214,6 +224,12 @@ class InferenceEngine:
                 evidence.append("Known-bad checks skipped: this SHA-256 is on your local allowlist.")
             if kb.yara_error:
                 evidence.append(f"YARA scan error: {kb.yara_error}")
+        if intel is not None and intel.status != "disabled":
+            evidence.append({
+                "listed": f"Threat intel: listed on MalwareBazaar as {intel.signature or 'malware'} (first seen {intel.first_seen}).",
+                "not_listed": "Threat intel: not listed on MalwareBazaar (absence is not evidence of safety).",
+                "error": f"Threat intel lookup failed: {intel.detail}",
+            }[intel.status])
         if sig is not None:
             evidence.append(f"Authenticode: {'valid' if sig.is_trusted else 'not trusted'} ({sig.provider}; {sig.details})")
         sev_rank = {"high": 0, "medium": 1, "low": 2}
@@ -265,7 +281,7 @@ class InferenceEngine:
             from threatweaver.core.policy import POLICY_VERSION
             parts = [POLICY_VERSION, self.bundle.file_sha256(), f"tauh={self.bundle.tau_high:.6f}",
                      f"taul={self.bundle.tau_low:.6f}", f"sig={int(self.signature_verifier.enabled)}",
-                     f"kb={self.known_bad.version}"]
+                     f"kb={self.known_bad.version}", f"intel={int(self._intel_enabled())}"]
             return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:32]
         parts = [
             VERDICT_POLICY_VERSION,
@@ -276,6 +292,11 @@ class InferenceEngine:
             f"sig={int(self.signature_verifier.enabled)}",
         ]
         return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:32]
+
+    @staticmethod
+    def _intel_enabled() -> bool:
+        from threatweaver.detectors.threat_intel import load_config
+        return bool(load_config().get("enabled"))
 
     def _is_protected_checkpoint(self, path: Path) -> bool:
         """Shipped checkpoints and any checkpoint this engine loaded from are read-only."""

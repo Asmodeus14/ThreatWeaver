@@ -11,6 +11,8 @@ interface SettingsResponse {
     enable_signature_verifier: boolean;
     enable_hash_cache: boolean;
     cached_entries: number;
+    intel_enabled: boolean;
+    intel_has_api_key: boolean;
   };
 }
 
@@ -67,6 +69,36 @@ export function Settings() {
             style={{ width: 100 }}
           />
         </label>
+      </section>
+
+      <section className="panel panel-pad section">
+        <h2>Threat intelligence (optional)</h2>
+        <p className="muted small">
+          Looks up the SHA-256 of each scanned executable on abuse.ch MalwareBazaar. Only the hash is sent: never the file, its name or its path.
+          A listing marks the file as known malicious; not being listed says nothing about safety. Off by default.
+        </p>
+        <form
+          className="row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const key = (e.currentTarget.elements.namedItem("intelKey") as HTMLInputElement).value.trim();
+            if (!key) return;
+            save({ intel_api_key: key, intel_enabled: true }, "API key saved and lookups enabled.");
+            (e.currentTarget.elements.namedItem("intelKey") as HTMLInputElement).value = "";
+          }}
+        >
+          <label className="row">
+            <input
+              type="checkbox"
+              checked={s.intel_enabled}
+              disabled={!s.intel_has_api_key}
+              onChange={(e) => save({ intel_enabled: e.target.checked }, e.target.checked ? "Hash lookups enabled." : "Hash lookups disabled.")}
+            />
+            Enable hash lookups
+          </label>
+          <input name="intelKey" type="password" autoComplete="off" placeholder={s.intel_has_api_key ? "API key saved; enter a new one to replace it" : "MalwareBazaar API key"} aria-label="MalwareBazaar API key" style={{ flex: 1, minWidth: 240 }} />
+          <button type="submit">Save key</button>
+        </form>
       </section>
 
       <WatchPanel />

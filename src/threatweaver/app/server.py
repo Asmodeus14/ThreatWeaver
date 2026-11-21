@@ -433,6 +433,12 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                 self.engine.hash_cache.enabled = bool(enable_cache)
             if body.get("clear_cache", False) and hasattr(self.engine, "hash_cache"):
                 self.engine.hash_cache.clear()
+            from threatweaver.detectors import threat_intel
+            if "intel_enabled" in body or body.get("intel_api_key"):
+                key = body.get("intel_api_key")
+                threat_intel.save_config(bool(body.get("intel_enabled", threat_intel.load_config().get("enabled"))),
+                                         str(key)[:200] if key else None)
+            intel_cfg = threat_intel.load_config()
             self._serve_json({
                 "status": "success",
                 "settings": {
@@ -441,6 +447,8 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                     "enable_signature_verifier": getattr(self.engine.signature_verifier, "enabled", False),
                     "enable_hash_cache": getattr(self.engine.hash_cache, "enabled", False),
                     "cached_entries": getattr(self.engine.hash_cache, "count", lambda: 0)(),
+                    "intel_enabled": bool(intel_cfg.get("enabled")),
+                    "intel_has_api_key": bool(intel_cfg.get("has_api_key")),
                 }
             })
 
