@@ -52,7 +52,31 @@ KNOWN_FILES = {
         "expected_bytes": 2593425203,
         "format": "PE (x86)",
     },
+    # Official training partitions (2023-09 -> 2024-09). SHA-256 values are the
+    # X-Linked-ETag published by Hugging Face for each LFS object (checked 2026-11-21).
+    "Win64_train": {
+        "filename": "Win64_train.zip",
+        "description": "Win64 training partition (benign + malicious)",
+        "expected_bytes": 5853142901,
+        "sha256": "7b050100ce7bd87149bbfca442de3e02d4bf97d51251566caec2581eebe799fd",
+        "format": "PE (x64)",
+    },
+    "Dot_Net_train": {
+        "filename": "Dot_Net_train.zip",
+        "description": ".NET training partition (benign + malicious)",
+        "expected_bytes": 937108923,
+        "sha256": "b9f6e90ab75293a7ceb9339700586dd033a03d19766282755ee31dfa0836e625",
+        "format": "PE (.NET assembly)",
+    },
 }
+
+
+def sha256_of(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(8 * 1024 * 1024):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def get_remote_file_info(filename: str) -> Tuple[int, str]:
@@ -213,7 +237,7 @@ def main():
     parser = argparse.ArgumentParser(description="ThreatWeaver EMBER2024 Dataset Acquisition Tool")
     parser.add_argument(
         "--target",
-        choices=["challenge", "Dot_Net_test", "Win64_test", "Win32_test", "all"],
+        choices=["challenge", "Dot_Net_test", "Win64_test", "Win32_test", "Win64_train", "Dot_Net_train", "all"],
         default="challenge",
         help="EMBER2024 component to acquire (default: challenge, 32MB)",
     )
@@ -241,6 +265,17 @@ def main():
         fn = info["filename"]
         zip_dest = dest_dir / fn
         download_file_resumable(fn, zip_dest, expected_bytes=info["expected_bytes"])
+        if zip_dest.stat().st_size != info["expected_bytes"]:
+            print(f"[!] Size mismatch for {fn}: {zip_dest.stat().st_size} != {info['expected_bytes']}. Aborting.")
+            return 1
+        if info.get("sha256"):
+            print(f"[*] Verifying SHA-256 of {fn}...")
+            actual = sha256_of(zip_dest)
+            if actual != info["sha256"]:
+                print(f"[!] SHA-256 mismatch for {fn}: {actual}. Deleting and aborting.")
+                zip_dest.unlink()
+                return 1
+            print("[+] SHA-256 verified.")
 
         extract_dir = dest_dir / tgt
         extract_zip_archive(zip_dest, extract_dir)

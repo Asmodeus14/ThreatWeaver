@@ -21,9 +21,9 @@ Defaults chosen (change any time): React + TypeScript frontend · signature bypa
 ## Phase 2 — Feature & evaluation foundation
 - [x] 2.1 Deterministic legacy features (replace `hash()`)
 - [x] 2.2 `thrember` integration (EMBER2024 v3, 2,568-D) with parity tests
-- [!] 2.3 Dataset pipeline — needs approval for EMBER2024 train-partition download (~75–100 GB)
+- [~] 2.3 Dataset pipeline — approved: Win64 + .NET train. Pipeline built & tested; download in progress
 - [ ] 2.4 Sandboxed extraction worker pool (timeouts, memory caps)
-- [ ] 2.5 Evaluation harness → `eval.json` single source of truth
+- [x] 2.5 Evaluation harness → `eval.json` single source of truth
 
 ## Phase 3 — Detection models
 - [ ] 3.1 LightGBM primary detector, calibrated, FPR-targeted thresholds
@@ -102,3 +102,14 @@ Defaults chosen (change any time): React + TypeScript frontend · signature bypa
   deterministic across processes; golden vector hashes in `tests/golden/` detect extractor drift.
   Deleted fake `scanner/ember_extractor.py`. Perf note: notepad.exe ≈400 ms (Authenticode parsing) → address in 2.4/5.3.
   `ember` extra in pyproject; lockfile refreshed. 145 pass, 1 skipped.
+- 2.3 (in progress): `tools/download_ember2024.py` gained Win64_train (5.85 GB) / Dot_Net_train (0.94 GB) with size +
+  SHA-256 verification (HF X-Linked-ETag) before extraction. New `data/ember_v3_dataset.py` + `tools/build_ember_v3_dataset.py`:
+  metadata pass (label/PE/file-type filter, exact-sha256 dedupe, byte offsets) → parallel thrember vectorization into float32
+  memmaps + Parquet metadata; temporal val = last 8 weeks of train; manifest with source & output SHA-256 and split definition.
+  Tested on real records (dedupe, unlabeled, parity with scanner extraction, tamper detection). TLSH near-duplicate audit
+  not done yet (needs py-tlsh; O(N·M) cost) — documented limitation.
+- 2.5: `evaluation/harness.py` (eval/1 schema): ROC/PR-AUC, TPR@FPR, validation-chosen thresholds applied to test,
+  ECE + reliability bins, Brier, histograms, curves, bootstrap CIs, drift, novelty, provenance. Continuity check
+  `tools/reproduce_v01_eval.py` reproduces published v0.1 metrics EXACTLY (F1 0.8684, ROC 0.9375, PR 0.9328, DR@1% 0.1805).
+  Published novelty AUROC 0.601 came from an undeployed detector (12 protos/class, τ fit on test); shipped detector = 0.563.
+  New finding: a 1%-FPR threshold chosen on validation yields 2.06% FPR on test (TPR 0.52).
