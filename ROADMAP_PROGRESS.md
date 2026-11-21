@@ -39,10 +39,10 @@ Defaults chosen (change any time): React + TypeScript frontend · signature bypa
 - [ ] 4.5 capa on demand (optional)
 
 ## Phase 5 — Architecture & performance
-- [ ] 5.1 FastAPI migration (v1 paths preserved)
-- [ ] 5.2 SQLite storage
-- [ ] 5.3 SSE scan events, single-read pipeline
-- [ ] 5.4 App data in `%LOCALAPPDATA%`
+- [x] 5.1 FastAPI migration (v1 paths preserved)
+- [x] 5.2 SQLite storage (scan history; cache already SQLite)
+- [x] 5.3 Incremental scan events (cursor endpoint — see log for why not SSE)
+- [x] 5.4 App data in `%LOCALAPPDATA%`
 
 ## Phase 6 — UI/UX modernization
 - [ ] 6.1 Vite + React + TS scaffold
@@ -144,3 +144,13 @@ Defaults chosen (change any time): React + TypeScript frontend · signature bypa
 - 4.2: `detectors/indicators.py` from thrember raw (packers, W^X, unpack targets, entry section, overlays, API combos,
   signature anomalies, parser warnings). Tuned on 148 signed System32 files: dropped "future timestamp" (fired on 55% —
   reproducible builds) and 1–2 parser warnings (17%). v2 path now parses each file once.
+- 5.4: `core/paths.py` — vault, cache, history, local models, keys, rules under `%LOCALAPPDATA%\ThreatWeaver`
+  (THREATWEAVER_HOME override); resources from install root (works frozen). Real run migrated the v0.1 vault (copy +
+  SHA-256 verify, legacy kept with MIGRATED.txt). Tests use a throwaway home.
+- 5.2: SQLite (WAL) scan history, same API/shape + `search_results()`; imported all 170 legacy scans once.
+- 5.3: `/api/scan/events?since=&seq=` cursor endpoint (≤250 new results/poll; UI renders latest 500). Not SSE because
+  EventSource cannot send the auth header (token in URL would leak to logs/history).
+- 5.1: FastAPI app (`app/api.py`) delegating to `ApiCore` (the existing handler logic run socket-free) → one
+  implementation, identical v1 behaviour; OpenAPI at `/api/openapi.json`; guard as middleware; uvicorn is the default
+  runtime, stdlib fallback. Found & fixed: Windows spawn re-imports the launcher → added `freeze_support()` to CLI and
+  desktop entry points (otherwise a PyInstaller build would relaunch itself in every parsing worker). 207 pass.
