@@ -72,6 +72,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
             enable_signature_verifier=not no_sig,
             enable_hash_cache=not no_cache,
             isolate_extraction=True,
+            bundle_path=getattr(args, "bundle", None),
         )
     else:
         console.print(f"[green]Loading calibrated checkpoint: {ckpt_path.name}[/green]")
@@ -80,6 +81,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
             enable_signature_verifier=not no_sig,
             enable_hash_cache=not no_cache,
             isolate_extraction=True,
+            bundle_path=getattr(args, "bundle", None),
         )
 
     if clear_cache:
@@ -127,8 +129,14 @@ def cmd_scan(args: argparse.Namespace) -> int:
 
     for r in report.results:
         # Verdict color coding
-        if r.verdict == ScanVerdict.SUSPICIOUS:
-            verdict_style = "[bold red]SUSPICIOUS[/bold red]"
+        if r.verdict == ScanVerdict.KNOWN_MALICIOUS:
+            verdict_style = "[bold white on red]KNOWN MALICIOUS[/bold white on red]"
+        elif r.verdict == ScanVerdict.LIKELY_MALICIOUS:
+            verdict_style = "[bold red]LIKELY MALICIOUS[/bold red]"
+        elif r.verdict == ScanVerdict.TRUSTED_SIGNER:
+            verdict_style = "[green]Trusted Signer[/green]"
+        elif r.verdict == ScanVerdict.SUSPICIOUS:
+            verdict_style = "[bold yellow]SUSPICIOUS[/bold yellow]"
         elif r.verdict == ScanVerdict.UNFAMILIAR:
             verdict_style = "[bold magenta]UNFAMILIAR[/bold magenta]"
         elif r.verdict == ScanVerdict.LIKELY_BENIGN:
@@ -148,8 +156,10 @@ def cmd_scan(args: argparse.Namespace) -> int:
             triage_badge = "[green]🛡️ Signed[/green]"
         elif r.verdict == ScanVerdict.UNSUPPORTED:
             triage_badge = "[yellow]Format[/yellow]"
+        elif "LightGBM" in r.model_version:
+            triage_badge = "[magenta]LightGBM[/magenta]"
         else:
-            triage_badge = "[magenta]🧠 ResMLP[/magenta]"
+            triage_badge = "[magenta]Neural (legacy)[/magenta]"
 
         table.add_row(r.file_name, verdict_style, triage_badge, prob_str, short_sha, evidence_text)
 
@@ -160,7 +170,9 @@ def cmd_scan(args: argparse.Namespace) -> int:
     summary_text = (
         f"[bold]Total Files Scanned:[/bold] {s.total_scanned} in {report.duration_seconds}s\n"
         f"[green]Likely Benign:[/green] {s.likely_benign}  |  "
-        f"[red]Suspicious:[/red] {s.suspicious}  |  "
+        f"[green]Trusted Signer:[/green] {s.trusted_signer}  |  "
+        f"[bold red]Known/Likely Malicious:[/bold red] {s.known_malicious + s.likely_malicious}  |  "
+        f"[yellow]Suspicious:[/yellow] {s.suspicious}  |  "
         f"[magenta]Unfamiliar / OOD:[/magenta] {s.unfamiliar}  |  "
         f"[yellow]Unsupported:[/yellow] {s.unsupported}  |  "
         f"[dim]Errors:[/dim] {s.analysis_errors}"
@@ -180,7 +192,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
         console.print(f"[green]Exported Markdown report to: {p_md}[/green]")
 
     # If suspicious files exist and interactive mode is enabled, prompt user
-    suspicious_files = [r for r in report.results if r.verdict == ScanVerdict.SUSPICIOUS]
+    flagged = (ScanVerdict.KNOWN_MALICIOUS, ScanVerdict.LIKELY_MALICIOUS, ScanVerdict.SUSPICIOUS)
+    suspicious_files = [r for r in report.results if r.verdict in flagged]
     if suspicious_files and not args.no_prompt:
         console.print(f"\n[bold yellow]Found {len(suspicious_files)} suspicious file(s).[/bold yellow]")
         if Confirm.ask("Would you like to quarantine these suspicious files into the isolated vault?"):
@@ -438,6 +451,7 @@ def cmd_ui(args: argparse.Namespace) -> int:
         host=host,
         port=args.port,
         checkpoint_path=args.checkpoint,
+        bundle_path=getattr(args, "bundle", None),
         open_browser=not args.no_browser,
         print_token=getattr(args, "print_token", False),
     )
@@ -468,6 +482,7 @@ def main() -> None:
     p_ui.add_argument("--host", default="127.0.0.1", help="HTTP host bind address (default: 127.0.0.1)")
     p_ui.add_argument("--port", type=int, default=8765, help="HTTP port (default: 8765)")
     p_ui.add_argument("--checkpoint", default=None, help="Model checkpoint path")
+    p_ui.add_argument("--bundle", default=None, help="Signed LightGBM model bundle directory (v2 detector)")
     p_ui.add_argument("--no-browser", action="store_true", help="Do not automatically open browser")
     p_ui.add_argument("--print-token", action="store_true", help="Print the per-session API token for scripted access")
 
@@ -481,6 +496,7 @@ def main() -> None:
     p_scan = subparsers.add_parser("scan", help="Scan a file or directory for threats")
     p_scan.add_argument("path", help="Path to file or directory to scan")
     p_scan.add_argument("--checkpoint", default=None, help="Path to model checkpoint")
+    p_scan.add_argument("--bundle", default=None, help="Signed LightGBM model bundle directory (v2 detector)")
     p_scan.add_argument("--workers", type=int, default=4, help="Max worker threads")
     p_scan.add_argument("--all-files", action="store_true", help="Scan all files, not just PE extensions")
     p_scan.add_argument("--export-json", default=None, help="Save report to JSON file")

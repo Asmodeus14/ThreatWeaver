@@ -40,6 +40,9 @@ LOCAL_MODELS_DIR = Path("artifacts/models/local")
 class ScanVerdict(str, Enum):
     """Calibrated security verdict for a scanned file."""
     LIKELY_BENIGN = "Likely Benign"
+    TRUSTED_SIGNER = "Trusted Signer"
+    LIKELY_MALICIOUS = "Likely Malicious"
+    KNOWN_MALICIOUS = "Known Malicious"
     SUSPICIOUS = "Suspicious"
     UNFAMILIAR = "Unfamiliar / Out-of-Distribution"
     UNSUPPORTED = "Unsupported Format"
@@ -80,6 +83,7 @@ class InferenceEngine:
         extraction_timeout_s: float = 15.0,
         extraction_memory_mb: int = 1024,
         extraction_workers: int = 2,
+        bundle_path: Optional[str | Path] = None,
     ):
         self.device = torch.device(device)
         self.threshold = classification_threshold
@@ -101,6 +105,13 @@ class InferenceEngine:
 
         if checkpoint_path and Path(checkpoint_path).is_file():
             self.load_model(checkpoint_path)
+
+        # v2 detector: signed LightGBM bundle on EMBER2024 v3 features (takes precedence when loaded)
+        self.bundle = None
+        if bundle_path:
+            from threatweaver.models.bundle import LGBMBundle
+            self.bundle = LGBMBundle.load(bundle_path)
+            self.model_version = f"{self.bundle.id} (LightGBM, EMBER v3)"
 
     def load_model(self, checkpoint_path: str | Path) -> None:
         """Loads and initializes model from safe checkpoint."""
@@ -137,6 +148,74 @@ class InferenceEngine:
         self.checkpoint_loaded = True
         self.model_version = f"ThreatWeaver-v{meta.get('schema_version', '1.0')}"
 
+    def _analyze_with_bundle(self, path: Path, file_size: int, file_sha256: str, fingerprint: str,
+                             start_t: float, bypass_signature: bool) -> "ScanResult":
+        """v2 pipeline: EMBER v3 features -> calibrated LightGBM -> verdict policy.
+
+        The Authenticode result is passed to the policy as evidence; it never skips the model.
+        """
+        import time
+
+        from threatweaver.core.policy import Evidence, decide
+
+        if self.extraction_pool is not None:
+            from threatweaver.sandboxing import ExtractionFailure
+            # thrember's string features cost ~0.75 s/MB on large files: scale the timeout with size.
+            timeout = min(180.0, self.extraction_pool.timeout_s + file_size / (1024 * 1024))
+            parsed = self.extraction_pool.run("v3_with_indicators", str(path), timeout_s=timeout)
+            if isinstance(parsed, ExtractionFailure):
+                parsed = {"failure": f"{parsed.reason}: {parsed.detail}"}
+        else:
+            from threatweaver.sandboxing.pool import _task_v3_with_indicators
+            try:
+                parsed = _task_v3_with_indicators(str(path))
+            except Exception as e:  # noqa: BLE001 - surfaced as an analysis error
+                parsed = {"failure": f"error: {type(e).__name__}: {e}"}
+
+        sig = None
+        if self.signature_verifier.enabled and not bypass_signature and parsed.get("is_pe"):
+            sig = self.signature_verifier.verify_file(path)
+
+        p_mal = None
+        if parsed.get("is_pe") and parsed.get("vector") is not None:
+            p_mal = float(self.bundle.predict_proba(parsed["vector"])[0])
+
+        decision = decide(Evidence(
+            parse_ok="failure" not in parsed,
+            is_pe=bool(parsed.get("is_pe", True)),
+            p_malicious=p_mal,
+            tau_high=self.bundle.tau_high,
+            tau_low=self.bundle.tau_low,
+            signature_trusted=bool(sig and sig.is_trusted),
+            signer=(sig.subject if sig else None),
+            is_novel=None,
+            parse_error=parsed.get("failure") or parsed.get("error"),
+        ))
+        evidence = list(decision.reasons)
+        if sig is not None:
+            evidence.append(f"Authenticode: {'valid' if sig.is_trusted else 'not trusted'} ({sig.provider}; {sig.details})")
+        evidence.extend(f"Static indicator: {i}" for i in parsed.get("indicators", []))
+
+        res = ScanResult(
+            file_path=str(path),
+            file_name=path.name,
+            file_size_bytes=file_size,
+            sha256=file_sha256,
+            verdict=ScanVerdict(decision.verdict),
+            malware_probability=p_mal if p_mal is not None else 0.0,
+            novelty_score=0.0,
+            is_novel=False,
+            evidence_points=evidence,
+            scan_duration_ms=(time.time() - start_t) * 1000.0,
+            model_version=self.model_version,
+            raw_indicators=list(parsed.get("indicators", [])),
+            nearest_known_cluster=None,
+            warning_message=None if p_mal is not None else "No model score; treat as unknown, not benign.",
+        )
+        if self.hash_cache.enabled and file_sha256:
+            self.hash_cache.record_scan_result(res, fingerprint, source="LightGBM")
+        return res
+
     def close(self) -> None:
         """Stops isolated parsing workers and closes the cache."""
         if self.extraction_pool is not None:
@@ -157,6 +236,11 @@ class InferenceEngine:
         else:
             ckpt_digest = "no-model"
         nd = self.novelty_detector
+        if getattr(self, "bundle", None) is not None:
+            from threatweaver.core.policy import POLICY_VERSION
+            parts = [POLICY_VERSION, self.bundle.file_sha256(), f"tauh={self.bundle.tau_high:.6f}",
+                     f"taul={self.bundle.tau_low:.6f}", f"sig={int(self.signature_verifier.enabled)}"]
+            return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:32]
         parts = [
             VERDICT_POLICY_VERSION,
             ckpt_digest if self.checkpoint_loaded else "no-model",
@@ -345,6 +429,9 @@ class InferenceEngine:
             cached_res = self.hash_cache.lookup(file_sha256, fingerprint, file_path=path)
             if cached_res is not None:
                 return cached_res
+
+        if self.bundle is not None:
+            return self._analyze_with_bundle(path, file_size, file_sha256, fingerprint, start_t, bypass_signature)
 
         # Tier 1: Windows Authenticode & System Catalog Verification (< 1-15 ms)
         if self.signature_verifier.enabled and not bypass_signature and file_size > 0:

@@ -101,7 +101,8 @@ class ScanStateManager:
     def get_status(self) -> Dict[str, Any]:
         with self.lock:
             def serialize_r(r: ScanResult) -> Dict[str, Any]:
-                triage = "Cache" if "Cached" in r.model_version else ("Authenticode" if "Authenticode" in r.model_version else "ResMLP")
+                mv = r.model_version
+                triage = "Cache" if "Cached" in mv else ("Authenticode" if "Authenticode" in mv else ("LightGBM" if "LightGBM" in mv else "Neural"))
                 return {
                     "file_path": r.file_path,
                     "file_name": r.file_name,
@@ -414,7 +415,8 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
     def _get_system_status(self) -> Dict[str, Any]:
         history = ScanHistoryManager().load_history()
         total_files_scanned = sum(h.get("summary", {}).get("total_scanned", 0) for h in history)
-        suspicious_count = sum(h.get("summary", {}).get("suspicious", 0) for h in history)
+        suspicious_count = sum(
+            h.get("summary", {}).get(k, 0) for h in history for k in ("suspicious", "likely_malicious", "known_malicious"))
         unfamiliar_count = sum(h.get("summary", {}).get("unfamiliar", 0) for h in history)
 
         # Include active session results
@@ -899,10 +901,12 @@ def create_server(
     host: str = "127.0.0.1",
     port: int = DEFAULT_PORT,
     checkpoint_path: Optional[str | Path] = None,
+    bundle_path: Optional[str | Path] = None,
 ) -> tuple[ThreadingHTTPServer, str]:
     """Configures and instantiates the ThreatWeaver HTTP server instance."""
     ckpt = Path(checkpoint_path) if checkpoint_path else DEFAULT_CHECKPOINT
-    engine = InferenceEngine(checkpoint_path=ckpt if ckpt.is_file() else None, isolate_extraction=True)
+    engine = InferenceEngine(checkpoint_path=ckpt if ckpt.is_file() else None, isolate_extraction=True,
+                             bundle_path=bundle_path)
     state_mgr = ScanStateManager(inference_engine=engine)
     quarantine_mgr = QuarantineManager()
 
@@ -926,11 +930,12 @@ def run_server(
     host: str = "127.0.0.1",
     port: int = DEFAULT_PORT,
     checkpoint_path: Optional[str | Path] = None,
+    bundle_path: Optional[str | Path] = None,
     open_browser: bool = True,
     print_token: bool = False,
 ) -> None:
     """Launches the ThreatWeaver local HTTP server."""
-    server, url = create_server(host=host, port=port, checkpoint_path=checkpoint_path)
+    server, url = create_server(host=host, port=port, checkpoint_path=checkpoint_path, bundle_path=bundle_path)
 
     print(f"\nThreatWeaver Apple Minimalist UI running at: {url}")
     if print_token:

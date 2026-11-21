@@ -3670,7 +3670,7 @@ function renderScanResultsTable(results) {
 
   tbody.innerHTML = results.map((r, idx) => {
     let vStr = r.verdict || "Likely Benign";
-    let badgeCls = vStr.includes("Suspicious") ? "danger" : (vStr.includes("Unfamiliar") ? "novel" : "good");
+    let badgeCls = (vStr.includes("Malicious") || vStr.includes("Suspicious")) ? "danger" : (vStr.includes("Unfamiliar") ? "novel" : (vStr.includes("Error") || vStr.includes("Unsupported") ? "warning" : "good"));
     let probPct = (r.malware_probability !== undefined) ? (r.malware_probability * 100).toFixed(1) + "%" : "---";
     let shortSha = r.sha256 ? r.sha256.slice(0, 12) + "..." : "N/A";
     let evText = (r.evidence_points && r.evidence_points.length) ? r.evidence_points[0] : (r.warning_message || "Normal structural attributes");
@@ -3679,7 +3679,7 @@ function renderScanResultsTable(results) {
     let tStage = r.triage_stage || ((r.model_version && r.model_version.includes("Cached")) ? "Cache" : ((r.model_version && r.model_version.includes("Authenticode")) ? "Authenticode" : "ResMLP"));
     let tBadge = tStage === "Cache" ? '<span class="badge" style="background:#f1f5f9;color:#334155;border:1px solid #e2e8f0"><svg class="tw-icon-sm" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Cache</span>' :
                  (tStage === "Authenticode" ? '<span class="badge" style="background:#f0fdf4;color:#166534;border:1px solid #bbf7d0"><svg class="tw-icon-sm" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Signed</span>' :
-                 '<span class="badge" style="background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe"><svg class="tw-icon-sm" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg> ResMLP</span>');
+                 '<span class="badge" style="background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe"><svg class="tw-icon-sm" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg> ${escapeHtml(tStage)}</span>');
 
     return `
       <tr style="cursor:pointer" title="Click to trace binary through Neural Inference Pipeline" onclick="traceFileByIndex(${idx})">

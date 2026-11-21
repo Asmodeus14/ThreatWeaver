@@ -45,6 +45,20 @@ def _task_ember_v3_vector(path: str):
     return get_extractor().vector_from_file(path)
 
 
+def _task_v3_with_indicators(path: str):
+    """One parse round-trip for the bundle path: EMBER v3 vector + human-readable indicators."""
+    from threatweaver.scanner.ember_v3 import get_extractor
+    from threatweaver.scanner.feature_extractor import FeatureExtractor
+
+    legacy = FeatureExtractor().extract_from_file(path)
+    if not legacy.is_valid_pe:
+        return {"is_pe": False, "error": legacy.raw_metadata.get("error"), "indicators": legacy.detected_indicators,
+                "vector": None, "file_size": legacy.file_size}
+    vec = get_extractor().vector_from_file(path)
+    return {"is_pe": True, "error": None, "indicators": legacy.detected_indicators, "vector": vec,
+            "file_size": legacy.file_size}
+
+
 def _diag_sleep(seconds: str):
     time.sleep(float(seconds))
     return "slept"
@@ -62,6 +76,7 @@ def _diag_alloc(megabytes: str):
 TASKS: Dict[str, Callable[[str], Any]] = {
     "legacy_features": _task_legacy_features,
     "ember_v3_vector": _task_ember_v3_vector,
+    "v3_with_indicators": _task_v3_with_indicators,
 }
 DIAGNOSTIC_TASKS: Dict[str, Callable[[str], Any]] = {
     "_sleep": _diag_sleep,

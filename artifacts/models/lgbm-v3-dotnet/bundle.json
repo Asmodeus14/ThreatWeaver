@@ -1,0 +1,224 @@
+{
+  "id": "lgbm-v3-dotnet",
+  "kind": "lightgbm-binary",
+  "feature_version": "ember-v3/thrember@0ef753e8",
+  "feature_dim": 2568,
+  "model_file": "model.txt",
+  "model_sha256": "4f57484e38b4843b90d67c9d47ffd051e69847343d7c84e00299105a1ddd07fa",
+  "calibration": {
+    "method": "platt_on_raw_margin",
+    "a": 0.6719085051443474,
+    "b": -0.25594819474760633,
+    "fit_on": "val"
+  },
+  "thresholds": {
+    "tau_high_fpr_0.1pct": 0.9865123862664795,
+    "tau_low_fpr_1pct": 0.8270314171560234
+  },
+  "params": {
+    "objective": "binary",
+    "metric": [
+      "auc",
+      "binary_logloss"
+    ],
+    "num_leaves": 64,
+    "min_data_in_leaf": 100,
+    "learning_rate": 0.1,
+    "num_threads": 12,
+    "seed": 0,
+    "deterministic": true,
+    "verbose": -1
+  },
+  "num_trees": 500,
+  "train_seconds": 148.0,
+  "dataset_manifest_sha256": "d1c9252e59ca72dc98d4a673e83f4fc521bed17ed94b419474295d5a394a96ed",
+  "dataset_splits": {
+    "train": {
+      "rows": 220000,
+      "benign": 110000,
+      "malicious": 110000,
+      "vectorize_failures": 0
+    },
+    "val": {
+      "rows": 40000,
+      "benign": 20000,
+      "malicious": 20000,
+      "vectorize_failures": 0
+    },
+    "test": {
+      "rows": 59953,
+      "benign": 29953,
+      "malicious": 30000,
+      "vectorize_failures": 0
+    },
+    "challenge": {
+      "rows": 829,
+      "benign": 0,
+      "malicious": 829,
+      "vectorize_failures": 0
+    }
+  },
+  "top_features_by_gain": [
+    {
+      "feature": 739,
+      "gain": 905045.943950221
+    },
+    {
+      "feature": 2478,
+      "gain": 75939.79110971093
+    },
+    {
+      "feature": 2433,
+      "gain": 39731.71168279648
+    },
+    {
+      "feature": 724,
+      "gain": 26365.16617077589
+    },
+    {
+      "feature": 596,
+      "gain": 23766.01516455412
+    },
+    {
+      "feature": 924,
+      "gain": 23591.443873107433
+    },
+    {
+      "feature": 2409,
+      "gain": 22771.371530652046
+    },
+    {
+      "feature": 520,
+      "gain": 20969.648695975542
+    },
+    {
+      "feature": 2417,
+      "gain": 15350.051490098238
+    },
+    {
+      "feature": 133,
+      "gain": 12145.475821524858
+    },
+    {
+      "feature": 681,
+      "gain": 11858.899064332247
+    },
+    {
+      "feature": 577,
+      "gain": 11226.95618507266
+    },
+    {
+      "feature": 2418,
+      "gain": 10970.772971004248
+    },
+    {
+      "feature": 722,
+      "gain": 10051.406736671925
+    },
+    {
+      "feature": 991,
+      "gain": 8890.739391505718
+    },
+    {
+      "feature": 642,
+      "gain": 8742.450924426317
+    },
+    {
+      "feature": 696,
+      "gain": 8734.107223629951
+    },
+    {
+      "feature": 742,
+      "gain": 8223.638217240572
+    },
+    {
+      "feature": 632,
+      "gain": 8157.621642917395
+    },
+    {
+      "feature": 664,
+      "gain": 7777.752885103226
+    },
+    {
+      "feature": 697,
+      "gain": 7536.571068525314
+    },
+    {
+      "feature": 95,
+      "gain": 6658.3773429095745
+    },
+    {
+      "feature": 2413,
+      "gain": 6057.814463168383
+    },
+    {
+      "feature": 141,
+      "gain": 5818.858424901962
+    },
+    {
+      "feature": 9,
+      "gain": 5071.048355013132
+    },
+    {
+      "feature": 674,
+      "gain": 4889.705942004919
+    },
+    {
+      "feature": 650,
+      "gain": 4581.174395665526
+    },
+    {
+      "feature": 653,
+      "gain": 4047.5608997642994
+    },
+    {
+      "feature": 874,
+      "gain": 3835.229076862335
+    },
+    {
+      "feature": 130,
+      "gain": 3711.8966126441956
+    },
+    {
+      "feature": 686,
+      "gain": 3595.621180653572
+    },
+    {
+      "feature": 611,
+      "gain": 3594.876654088497
+    },
+    {
+      "feature": 705,
+      "gain": 3549.130027413368
+    },
+    {
+      "feature": 649,
+      "gain": 3504.326837003231
+    },
+    {
+      "feature": 118,
+      "gain": 3501.1677300930023
+    },
+    {
+      "feature": 668,
+      "gain": 3455.1438931524754
+    },
+    {
+      "feature": 619,
+      "gain": 3442.69741037488
+    },
+    {
+      "feature": 734,
+      "gain": 3216.913940012455
+    },
+    {
+      "feature": 684,
+      "gain": 3195.7875973284245
+    },
+    {
+      "feature": 690,
+      "gain": 3122.307230502367
+    }
+  ],
+  "created_utc": "2026-11-21T12:55:25Z"
+}

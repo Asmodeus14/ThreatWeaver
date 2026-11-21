@@ -26,10 +26,10 @@ Defaults chosen (change any time): React + TypeScript frontend · signature bypa
 - [x] 2.5 Evaluation harness → `eval.json` single source of truth
 
 ## Phase 3 — Detection models
-- [ ] 3.1 LightGBM primary detector, calibrated, FPR-targeted thresholds
+- [~] 3.1 LightGBM primary detector, calibrated, FPR-targeted thresholds — .NET model done; Win64 pending download
 - [ ] 3.2 ResMLP retrained on v3 features (comparison / embeddings)
 - [ ] 3.3 Novelty v2 (kNN reference bank)
-- [ ] 3.4 Model bundle + verdict policy v2
+- [~] 3.4 Model bundle + verdict policy v2 — wired in, opt-in via `--bundle` until the Win64 model is validated
 
 ## Phase 4 — Static analysis & evidence
 - [ ] 4.1 TreeSHAP grouped explanations
@@ -120,3 +120,16 @@ Defaults chosen (change any time): React + TypeScript frontend · signature bypa
   MB); now lazy (PEP 562), worker start ≈0.3 s. Workers run single-threaded (OpenBLAS per-core buffers exceeded the cap).
   Verified: timeout, crash, 700 MB allocation under a 256 MB cap, concurrency, identical verdicts isolated vs in-process.
   165 pass, 1 skipped.
+- DATA FINDING: EMBER2024 JSONL files contain every sample twice (line i and i+N/2; copies differ only in `caps`).
+  Unique counts are half the record counts (e.g. ".NET test 120,000" = 60,000 unique files). v3 pipeline dedupes by
+  SHA-256; family summary + UI now count unique samples. Phase-0 family counts were double-counted (fixed; rerun pending).
+- 2.3: full .NET build — train 220,000 / val 40,000 / test 59,953 / challenge 829 unique samples, 0 failures, 94 s.
+- 3.1 (.NET): `artifacts/models/lgbm-v3-dotnet` (500 trees, 148 s train). Official test split, val-chosen thresholds:
+  ROC-AUC 0.9979, TPR@1%FPR 0.955 (v0.1: 0.18); τ_high → 81.6% TPR at 0.057% FPR; τ_low → 95.5% TPR at 0.99% FPR;
+  evasive challenge (.NET) 79.5% caught at τ_low; 0.016 ms/sample model time. Release-signed; opt-in only (.NET-trained).
+- 3.4: `core/policy.py` (policy-v2, exhaustive truth-table tests), `models/bundle.py` (fail-closed signed LightGBM loader),
+  engine `_analyze_with_bundle` (single sandboxed parse → v3 vector + indicators; signature = evidence → this is 1.6 on the
+  v2 path). New verdicts Known/Likely Malicious + Trusted Signer through reports, CLI, server, UI. `--bundle` option.
+  On System32 the .NET-only model gives 0 Likely Malicious but 16% Suspicious → native-binary training data required.
+  Large files: thrember string features ≈0.75 s/MB (87 MB file → 65 s); timeout now 15 s + 1 s/MB (cap 180 s).
+  Files > 100 MB report the real size-limit reason. 181 pass, 1 skipped.

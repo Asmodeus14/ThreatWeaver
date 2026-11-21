@@ -58,7 +58,8 @@ def decide(e: Evidence) -> Decision:
     if not e.parse_ok:
         return Decision(ANALYSIS_ERROR, [f"Static parsing failed: {e.parse_error or 'unknown error'}. Treat as unknown, not benign."])
     if not e.is_pe:
-        return Decision(UNSUPPORTED, ["Not a Windows PE file; the model was not applied."])
+        detail = f" ({e.parse_error})" if e.parse_error else ""
+        return Decision(UNSUPPORTED, [f"Not analysable as a Windows PE file{detail}; the model was not applied."])
     if e.known_bad:
         return Decision(KNOWN_MALICIOUS, [f"Matches known-malicious indicator: {e.known_bad}."])
     if e.p_malicious is None or e.tau_high is None or e.tau_low is None:

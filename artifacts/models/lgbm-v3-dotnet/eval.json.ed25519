@@ -1,0 +1,8 @@
+{
+  "alg": "ed25519",
+  "role": "release",
+  "key_id": "59728268a90fc08a",
+  "sha256": "28a1025a1a7ff65cae6b5f157725f86307200e16d599e0af0684e13df43e387d",
+  "signature": "dW00dk6xXOCwM0YonICPs223aa32Y9bdxPZPekawjuHY3NQHzzLEaZOtxTgHmXpLg+WYBECmrpjMIBUik+LEAQ==",
+  "signed_utc": "2026-11-21T13:07:54Z"
+}

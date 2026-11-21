@@ -21,6 +21,9 @@ class ScanSummary:
     """Summary counts of verdicts in a scan session."""
     total_scanned: int = 0
     likely_benign: int = 0
+    trusted_signer: int = 0
+    known_malicious: int = 0
+    likely_malicious: int = 0
     suspicious: int = 0
     unfamiliar: int = 0
     unsupported: int = 0
@@ -52,6 +55,12 @@ class ScanReport:
         for r in results:
             if r.verdict == ScanVerdict.LIKELY_BENIGN:
                 summary.likely_benign += 1
+            elif r.verdict == ScanVerdict.TRUSTED_SIGNER:
+                summary.trusted_signer += 1
+            elif r.verdict == ScanVerdict.KNOWN_MALICIOUS:
+                summary.known_malicious += 1
+            elif r.verdict == ScanVerdict.LIKELY_MALICIOUS:
+                summary.likely_malicious += 1
             elif r.verdict == ScanVerdict.SUSPICIOUS:
                 summary.suspicious += 1
             elif r.verdict == ScanVerdict.UNFAMILIAR:
@@ -125,7 +134,10 @@ class ScanReport:
             "|---|---|",
             f"| Total Scanned | {self.summary.total_scanned} |",
             f"| Likely Benign | {self.summary.likely_benign} |",
+            f"| Known Malicious | **{self.summary.known_malicious}** |",
+            f"| Likely Malicious | **{self.summary.likely_malicious}** |",
             f"| Suspicious | **{self.summary.suspicious}** |",
+            f"| Trusted Signer | **{self.summary.trusted_signer}** |",
             f"| Unfamiliar | **{self.summary.unfamiliar}** |",
             f"| Unsupported | {self.summary.unsupported} |",
             f"| Errors | {self.summary.analysis_errors} |",

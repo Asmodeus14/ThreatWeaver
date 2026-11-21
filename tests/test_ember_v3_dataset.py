@@ -136,6 +136,15 @@ def test_train_lgbm_smoke(tmp_path: Path):
     from threatweaver.models.bundle import BundleError, LGBMBundle
     bdir = tmp_path / "models" / "smoke"
     b = LGBMBundle.load(bdir)
+
+    # Engine v2 path: policy verdict from the bundle, signature treated as evidence
+    from threatweaver.scanner.inference import InferenceEngine
+    eng = InferenceEngine(bundle_path=bdir, cache_db_path=tmp_path / "c.db")
+    r = eng.analyze_file(REPO / "samples" / "suspicious_packed.exe")
+    assert "LightGBM" in r.model_version and r.malware_probability > 0
+    assert any("threshold" in e for e in r.evidence_points)
+    assert "Cached" in eng.analyze_file(REPO / "samples" / "suspicious_packed.exe").model_version
+    eng.close()
     X, _, _ = load_split(out, "test")
     p = b.predict_proba(X[:5])
     assert p.shape == (5,) and np.all((p >= 0) & (p <= 1))
