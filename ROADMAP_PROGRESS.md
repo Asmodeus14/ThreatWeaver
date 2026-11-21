@@ -51,13 +51,16 @@ Defaults chosen (change any time): React + TypeScript frontend · signature bypa
 - [x] 6.4 Research dashboards from `eval.json`
 
 ## Phase 7 — Advanced (experimental)
-- [ ] 7.1 Gated retraining + rollback
-- [ ] 7.2 Event-driven watcher
-- [ ] 7.3 Opt-in threat intel
-- [ ] 7.4 Behavioral telemetry (postponed)
+- [x] 7.1 Gated retraining (`train_lgbm.py --feedback --gate-against`; rejected bundles never eligible)
+- [x] 7.2 Event-driven watcher (watchdog; observational; `/api/watch` + Settings panel)
+- [x] 7.3 Opt-in threat intel (MalwareBazaar, hash only, off by default)
+- [ ] 7.4 Behavioral telemetry (postponed — out of scope for v0.2, as planned)
 
 ## Phase 8 — Testing, CI, docs, release
-- [ ] CI, fuzzing, model regression gate, docs, v0.2 release
+- [x] 8.1 CI workflow (written; not yet run on GitHub — nothing pushed)
+- [x] 8.2 Malformed-PE fuzzing (112 cases × 2 engines)
+- [x] 8.3 Model regression gate
+- [ ] 8.4 Documentation refresh (waiting for the Win64 model's final numbers)
 
 ## Log
 - 0.1: `.gitignore` rule `data/` → `/data/`; `src/threatweaver/data/` now shows as untracked (needs commit).
