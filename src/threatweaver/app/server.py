@@ -891,7 +891,7 @@ def create_server(
 ) -> tuple[ThreadingHTTPServer, str]:
     """Configures and instantiates the ThreatWeaver HTTP server instance."""
     ckpt = Path(checkpoint_path) if checkpoint_path else DEFAULT_CHECKPOINT
-    engine = InferenceEngine(checkpoint_path=ckpt if ckpt.is_file() else None)
+    engine = InferenceEngine(checkpoint_path=ckpt if ckpt.is_file() else None, isolate_extraction=True)
     state_mgr = ScanStateManager(inference_engine=engine)
     quarantine_mgr = QuarantineManager()
 

@@ -22,7 +22,7 @@ Defaults chosen (change any time): React + TypeScript frontend · signature bypa
 - [x] 2.1 Deterministic legacy features (replace `hash()`)
 - [x] 2.2 `thrember` integration (EMBER2024 v3, 2,568-D) with parity tests
 - [~] 2.3 Dataset pipeline — approved: Win64 + .NET train. Pipeline built & tested; download in progress
-- [ ] 2.4 Sandboxed extraction worker pool (timeouts, memory caps)
+- [x] 2.4 Sandboxed extraction worker pool (timeouts, memory caps)
 - [x] 2.5 Evaluation harness → `eval.json` single source of truth
 
 ## Phase 3 — Detection models
@@ -113,3 +113,10 @@ Defaults chosen (change any time): React + TypeScript frontend · signature bypa
   `tools/reproduce_v01_eval.py` reproduces published v0.1 metrics EXACTLY (F1 0.8684, ROC 0.9375, PR 0.9328, DR@1% 0.1805).
   Published novelty AUROC 0.601 came from an undeployed detector (12 protos/class, τ fit on test); shipped detector = 0.563.
   New finding: a 1%-FPR threshold chosen on validation yields 2.06% FPR on test (TPR 0.52).
+- 2.4: new `sandboxing/pool.py`: long-lived spawned workers, per-task timeout (kill + respawn), Windows Job Object
+  per-process memory cap, crash containment, recycling every 500 tasks, thread-safe. Server and CLI scans use it
+  (`isolate_extraction=True`); failures become ANALYSIS_ERROR ("treat as unknown, not benign") and are never cached.
+  Found & fixed: `scanner/__init__.py` eagerly imported the inference engine → PyTorch in every parser (3.5 s, hundreds of
+  MB); now lazy (PEP 562), worker start ≈0.3 s. Workers run single-threaded (OpenBLAS per-core buffers exceeded the cap).
+  Verified: timeout, crash, 700 MB allocation under a 256 MB cap, concurrency, identical verdicts isolated vs in-process.
+  165 pass, 1 skipped.

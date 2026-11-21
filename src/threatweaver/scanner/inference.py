@@ -76,6 +76,10 @@ class InferenceEngine:
         enable_signature_verifier: bool = True,
         enable_hash_cache: bool = True,
         cache_db_path: Optional[str | Path] = None,
+        isolate_extraction: bool = False,
+        extraction_timeout_s: float = 15.0,
+        extraction_memory_mb: int = 1024,
+        extraction_workers: int = 2,
     ):
         self.device = torch.device(device)
         self.threshold = classification_threshold
@@ -89,6 +93,11 @@ class InferenceEngine:
         self.model_version = "Unloaded"
         self.signature_verifier = WindowsSignatureVerifier(enabled=enable_signature_verifier)
         self.hash_cache = CleanHashCache(db_path=cache_db_path, enabled=enable_hash_cache)
+        self.extraction_pool = None
+        if isolate_extraction:
+            from threatweaver.sandboxing import ExtractionPool
+            self.extraction_pool = ExtractionPool(
+                workers=extraction_workers, timeout_s=extraction_timeout_s, memory_limit_mb=extraction_memory_mb)
 
         if checkpoint_path and Path(checkpoint_path).is_file():
             self.load_model(checkpoint_path)
@@ -127,6 +136,13 @@ class InferenceEngine:
                 )
         self.checkpoint_loaded = True
         self.model_version = f"ThreatWeaver-v{meta.get('schema_version', '1.0')}"
+
+    def close(self) -> None:
+        """Stops isolated parsing workers and closes the cache."""
+        if self.extraction_pool is not None:
+            self.extraction_pool.close()
+            self.extraction_pool = None
+        self.hash_cache.close()
 
     def cache_fingerprint(self) -> str:
         """Identifies everything that can change a verdict for identical file bytes."""
@@ -361,7 +377,26 @@ class InferenceEngine:
                 return sig_res
 
         # Tier 2: Static feature extraction
-        extracted = self.extractor.extract_from_file(path)
+        if self.extraction_pool is not None:
+            from threatweaver.sandboxing import ExtractionFailure
+            extracted = self.extraction_pool.run("legacy_features", str(path))
+            if isinstance(extracted, ExtractionFailure):
+                return ScanResult(
+                    file_path=str(path),
+                    file_name=path.name,
+                    file_size_bytes=file_size,
+                    sha256=file_sha256,
+                    verdict=ScanVerdict.ANALYSIS_ERROR,
+                    malware_probability=0.0,
+                    novelty_score=0.0,
+                    is_novel=False,
+                    evidence_points=[f"Static parsing stopped by isolation ({extracted.reason}): {extracted.detail}"],
+                    scan_duration_ms=(time.time() - start_t) * 1000.0,
+                    model_version=self.model_version,
+                    warning_message=f"Parsing {extracted.reason}; no verdict produced. Treat as unknown, not benign.",
+                )
+        else:
+            extracted = self.extractor.extract_from_file(path)
         extract_time_ms = (time.time() - start_t) * 1000.0
 
         if not extracted.is_valid_pe:

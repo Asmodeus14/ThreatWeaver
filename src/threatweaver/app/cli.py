@@ -71,6 +71,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
             checkpoint_path=None,
             enable_signature_verifier=not no_sig,
             enable_hash_cache=not no_cache,
+            isolate_extraction=True,
         )
     else:
         console.print(f"[green]Loading calibrated checkpoint: {ckpt_path.name}[/green]")
@@ -78,6 +79,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
             checkpoint_path=ckpt_path,
             enable_signature_verifier=not no_sig,
             enable_hash_cache=not no_cache,
+            isolate_extraction=True,
         )
 
     if clear_cache:
