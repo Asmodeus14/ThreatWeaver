@@ -469,6 +469,8 @@ def cmd_desktop(args: argparse.Namespace) -> int:
 
 def main() -> None:
     """CLI entry point for ThreatWeaver."""
+    import multiprocessing
+    multiprocessing.freeze_support()  # spawned parsing workers must not re-run the CLI when frozen
     print_banner()
 
     parser = argparse.ArgumentParser(

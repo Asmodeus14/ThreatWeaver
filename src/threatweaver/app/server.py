@@ -956,8 +956,12 @@ def create_server(
     port: int = DEFAULT_PORT,
     checkpoint_path: Optional[str | Path] = None,
     bundle_path: Optional[str | Path] = None,
-) -> tuple[ThreadingHTTPServer, str]:
-    """Configures and instantiates the ThreatWeaver HTTP server instance."""
+    backend: str = "fastapi",
+) -> tuple[Any, str]:
+    """Configures the ThreatWeaver server. backend: "fastapi" (uvicorn, default) or "stdlib".
+
+    Both expose serve_forever() / shutdown() / server_close() / api_token and run the same
+    endpoint logic (see threatweaver.app.api.ApiCore)."""
     ckpt = Path(checkpoint_path) if checkpoint_path else DEFAULT_CHECKPOINT
     try:
         migrate_legacy_vault()
@@ -975,13 +979,63 @@ def create_server(
     ThreatWeaverRequestHandler.quarantine_mgr = quarantine_mgr
     ThreatWeaverRequestHandler.adaptation_svc = adaptation_svc
 
-    server = ThreadingHTTPServer((host, port), ThreatWeaverRequestHandler)
+    token = security.generate_token()
+    ThreatWeaverRequestHandler.api_token = token
+    if backend == "fastapi":
+        try:
+            server = UvicornServer(host, port, token)
+        except ImportError:
+            print("[!] fastapi/uvicorn not installed; falling back to the stdlib server")
+            backend = "stdlib"
+    if backend == "stdlib":
+        server = ThreadingHTTPServer((host, port), ThreatWeaverRequestHandler)
+        server.api_token = token  # type: ignore[attr-defined]
     bound_port = server.server_address[1]
-    ThreatWeaverRequestHandler.api_token = security.generate_token()
     ThreatWeaverRequestHandler.allowed_host_set = security.allowed_hosts(host, bound_port)
-    server.api_token = ThreatWeaverRequestHandler.api_token  # type: ignore[attr-defined]
+    if backend == "fastapi":
+        server.set_allowed_hosts(ThreatWeaverRequestHandler.allowed_host_set)
     url = f"http://{host}:{bound_port}"
     return server, url
+
+
+class UvicornServer:
+    """uvicorn-hosted FastAPI app with the same lifecycle methods as ThreadingHTTPServer."""
+
+    def __init__(self, host: str, port: int, token: str):
+        import socket
+
+        import uvicorn  # noqa: F401 - ImportError triggers the stdlib fallback
+        from threatweaver.app.api import create_app  # noqa: F401
+
+        self.api_token = token
+        family = socket.AF_INET6 if ":" in host else socket.AF_INET
+        self._sock = socket.socket(family, socket.SOCK_STREAM)
+        self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 0)
+        self._sock.bind((host, port))
+        self.server_address = self._sock.getsockname()[:2]
+        self._host = host
+        self._server = None
+
+    def set_allowed_hosts(self, hosts: set) -> None:
+        import uvicorn
+        from threatweaver.app.api import create_app
+
+        app = create_app(self.api_token, hosts)
+        config = uvicorn.Config(app, log_level="warning", access_log=False, lifespan="off")
+        self._server = uvicorn.Server(config)
+
+    def serve_forever(self) -> None:
+        self._server.run(sockets=[self._sock])
+
+    def shutdown(self) -> None:
+        if self._server is not None:
+            self._server.should_exit = True
+
+    def server_close(self) -> None:
+        try:
+            self._sock.close()
+        except OSError:
+            pass
 
 
 def run_server(
