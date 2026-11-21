@@ -45,10 +45,10 @@ Defaults chosen (change any time): React + TypeScript frontend · signature bypa
 - [x] 5.4 App data in `%LOCALAPPDATA%`
 
 ## Phase 6 — UI/UX modernization
-- [ ] 6.1 Vite + React + TS scaffold
-- [ ] 6.2 Design system
-- [ ] 6.3 Screen ports per preservation map (legacy UI kept at `/legacy`)
-- [ ] 6.4 Research dashboards from `eval.json`
+- [x] 6.1 Vite + React + TS scaffold
+- [x] 6.2 Design system
+- [x] 6.3 Screen ports per preservation map (legacy UI kept at `/legacy`)
+- [x] 6.4 Research dashboards from `eval.json`
 
 ## Phase 7 — Advanced (experimental)
 - [ ] 7.1 Gated retraining + rollback
@@ -154,3 +154,12 @@ Defaults chosen (change any time): React + TypeScript frontend · signature bypa
   implementation, identical v1 behaviour; OpenAPI at `/api/openapi.json`; guard as middleware; uvicorn is the default
   runtime, stdlib fallback. Found & fixed: Windows spawn re-imports the launcher → added `freeze_support()` to CLI and
   desktop entry points (otherwise a PyInstaller build would relaunch itself in every parsing worker). 207 pass.
+- 6: `frontend/` (Vite, React 18, strict TS, IBM Plex bundled offline, hand-written SVG charts instead of ECharts:
+  207 KB JS / 64 KB gzip). Served at `/` (token injected); classic UI at `/legacy`. Signature element: calibrated verdict
+  scale with the active detector's real thresholds. Preservation map: KPI facts, threat web (new canvas; real fs_items),
+  scan results (incremental), families, ablation table, continual-learning timeline/table (+ R-matrix heatmap), quarantine,
+  history, learning queue/prototypes, settings — all from real API data. New: Detections + detail drawer (policy reason,
+  TreeSHAP attribution, indicators, actions), Model performance (log-FPR ROC, PR, histogram, reliability, drift,
+  operating points, CIs). 3D "neural studio" (illustrative animation) remains in `/legacy` only. Reviewed via headless-
+  Chrome screenshots in both themes; fixed overlapping threshold labels, duplicate rows, clipped graph labels, PR axis.
+  Vitest + server tests; 210 Python tests pass.
