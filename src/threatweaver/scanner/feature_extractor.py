@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import re
+import zlib
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +26,11 @@ from threatweaver.scanner.pe_parser import (
 
 SCHEMA_VERSION = "1.0"
 FEATURE_DIM = 256
+
+
+def stable_bucket(text: str, n_buckets: int) -> int:
+    """Deterministic bucket index (CRC-32), identical across processes, machines and Python versions."""
+    return zlib.crc32(text.encode("utf-8", errors="replace")) % n_buckets
 
 # High-signal suspicious API patterns
 SUSPICIOUS_APIS = {
@@ -268,12 +274,14 @@ class FeatureExtractor:
             if count > 0:
                 indicators.append(f"Imports APIs related to {cat_name}: {', '.join(matches[:4])}")
 
-        # Hash projection of DLL names and imported symbols into remaining 48 dims (112..159)
+        # Hash projection of DLL names and imported symbols into remaining 48 dims (112..159).
+        # Uses a stable hash: Python's built-in hash() is salted per process, which made these
+        # dimensions (and therefore model scores) differ between runs.
         for dll in analysis.imported_dlls:
-            bucket = (hash(dll) % 24) + 112
+            bucket = stable_bucket(dll.lower(), 24) + 112
             vec[bucket] = min(vec[bucket] + 0.2, 1.0)
         for func in analysis.imported_functions:
-            bucket = (hash(func) % 24) + 136
+            bucket = stable_bucket(func, 24) + 136
             vec[bucket] = min(vec[bucket] + 0.1, 1.0)
 
         # ====================================================

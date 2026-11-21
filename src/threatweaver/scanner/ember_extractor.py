@@ -16,6 +16,7 @@ import numpy as np
 import pefile
 
 from threatweaver.data.ember_loader import EMBER_RAW_FEATURE_DIM
+from threatweaver.scanner.feature_extractor import stable_bucket
 from threatweaver.scanner.pe_parser import (
     StaticPEParser,
     compute_byte_histogram,
@@ -115,7 +116,7 @@ class EMBERFeatureExtractor:
         if analysis and analysis.imported_functions:
             for func in analysis.imported_functions:
                 # 1280 hash buckets
-                bucket = (hash(func) % 1280) + 1100
+                bucket = stable_bucket(func, 1280) + 1100
                 vec[bucket] = min(vec[bucket] + 0.1, 1.0)
 
         return vec
