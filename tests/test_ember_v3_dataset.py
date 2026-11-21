@@ -173,3 +173,48 @@ def test_train_lgbm_smoke(tmp_path: Path):
         f.write("\n")
     with pytest.raises(BundleError):
         LGBMBundle.load(bdir)
+
+
+def test_feedback_retraining_is_gated(tmp_path: Path):
+    """7.1: retraining with analyst feedback produces a bundle only the regression gate can accept."""
+    import subprocess
+    import sys
+
+    lines = _real_lines(400)
+    data = tmp_path / "ember2024"
+    _write(data / "Dot_Net_train" / "w1.jsonl", lines[:300])
+    _write(data / "Dot_Net_test" / "t1.jsonl", lines[300:])
+    out = tmp_path / "v3"
+    build_dataset(data, out, file_types=["Dot_Net"], val_weeks=0, workers=2, log=lambda *_: None)
+    import shutil
+    from threatweaver.data.ember_v3_dataset import sha256_file
+    m = json.loads((out / "manifest.json").read_text())
+    for f in ("X", "y", "meta"):
+        for ext in (".dat", ".npy", ".parquet"):
+            if (out / f"{f}_test{ext}").exists():
+                shutil.copy(out / f"{f}_test{ext}", out / f"{f}_val{ext}")
+    m["splits"]["val"] = m["splits"]["test"]
+    m["output_files"] = {p.name: sha256_file(p) for p in out.iterdir() if p.suffix in (".dat", ".npy", ".parquet")}
+    (out / "manifest.json").write_text(json.dumps(m))
+
+    tool = str(REPO / "tools" / "train_lgbm.py")
+    common = ["--data-dir", str(out), "--rounds", "5", "--num-leaves", "8", "--min-data-in-leaf", "5",
+              "--out-root", str(tmp_path / "models")]
+    base = subprocess.run([sys.executable, tool, "--name", "base", *common], capture_output=True, text=True, timeout=600)
+    assert base.returncode == 0, base.stderr[-1500:]
+    base_eval = tmp_path / "models" / "base" / "eval.json"
+    before = base_eval.read_bytes()
+
+    fb = tmp_path / "feedback.json"
+    fb.write_text(json.dumps([{"path": str(REPO / "samples" / "suspicious_packed.exe"), "label": 1},
+                              {"path": str(REPO / "samples" / "benign_helper.dll"), "label": 0},
+                              {"path": str(tmp_path / "missing.exe"), "label": 1}]))
+    cand = subprocess.run([sys.executable, tool, "--name", "cand", *common, "--feedback", str(fb),
+                           "--gate-against", str(base_eval)], capture_output=True, text=True, timeout=600)
+    assert base_eval.read_bytes() == before, "baseline must never be modified"
+    assert "Feedback: 2 files added" in cand.stdout
+    if cand.returncode == 0:
+        b = json.loads((tmp_path / "models" / "cand" / "bundle.json").read_text())
+        assert b["regression_gate"]["passed"] and b["feedback"]["added"] == 2
+    else:
+        assert (tmp_path / "models" / "cand-rejected").is_dir() and not (tmp_path / "models" / "cand").exists()

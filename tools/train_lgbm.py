@@ -52,6 +52,11 @@ def main() -> int:
     ap.add_argument("--threads", type=int, default=0)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out-root", default="artifacts/models")
+    ap.add_argument("--feedback", default=None,
+                    help="JSON list of {path, label} analyst decisions to add to training (roadmap 7.1)")
+    ap.add_argument("--feedback-weight", type=float, default=5.0, help="Sample weight for feedback files")
+    ap.add_argument("--gate-against", default=None,
+                    help="eval.json of the current model; the new bundle is accepted only if it does not regress")
     args = ap.parse_args()
 
     import lightgbm as lgb
@@ -71,6 +76,27 @@ def main() -> int:
         return 1
 
     X_tr, y_tr, _ = load_split(data_dir, "train")
+    w_tr = None
+    feedback_info = None
+    if args.feedback:
+        from threatweaver.sandboxing import ExtractionFailure, ExtractionPool
+        items = json.loads(Path(args.feedback).read_text(encoding="utf-8"))
+        vecs, labels, skipped = [], [], []
+        with ExtractionPool(workers=2, timeout_s=120) as pool:
+            for it in items:
+                v = pool.run("ember_v3_vector", str(it["path"]))
+                if isinstance(v, ExtractionFailure):
+                    skipped.append({"path": it["path"], "reason": v.reason})
+                    continue
+                vecs.append(v)
+                labels.append(int(it["label"]))
+        if vecs:
+            X_tr = np.vstack([np.asarray(X_tr), np.stack(vecs).astype(np.float32)])
+            y_tr = np.concatenate([y_tr, np.array(labels, dtype=y_tr.dtype)])
+            w_tr = np.concatenate([np.ones(len(y_tr) - len(vecs)), np.full(len(vecs), args.feedback_weight)])
+        feedback_info = {"added": len(vecs), "skipped": skipped, "weight": args.feedback_weight,
+                         "malicious": int(sum(labels)), "benign": int(len(labels) - sum(labels))}
+        print(f"[*] Feedback: {feedback_info['added']} files added (weight {args.feedback_weight}), {len(skipped)} skipped")
     X_va, y_va, m_va = load_split(data_dir, "val")
     print(f"[*] train {X_tr.shape}, val {X_va.shape}")
 
@@ -80,7 +106,7 @@ def main() -> int:
         "num_threads": args.threads, "seed": args.seed, "deterministic": True, "verbose": -1,
     }
     t0 = time.time()
-    dtrain = lgb.Dataset(np.asarray(X_tr), y_tr, categorical_feature=CATEGORICAL, free_raw_data=True)
+    dtrain = lgb.Dataset(np.asarray(X_tr), y_tr, weight=w_tr, categorical_feature=CATEGORICAL, free_raw_data=True)
     dval = lgb.Dataset(np.asarray(X_va), y_va, reference=dtrain, categorical_feature=CATEGORICAL)
     evals = {}
     booster = lgb.train(params, dtrain, num_boost_round=args.rounds, valid_sets=[dval], valid_names=["val"],
@@ -152,6 +178,24 @@ def main() -> int:
         "challenge": splits.get("challenge"), "timing": timing,
     }, indent=2))
     print(f"[+] Bundle written to {out}")
+
+    if args.gate_against:
+        from threatweaver.evaluation.gate import compare_files
+        gate = compare_files(out / "eval.json", args.gate_against)
+        bundle["regression_gate"] = {"against": args.gate_against, **gate.to_dict()}
+        bundle["feedback"] = feedback_info
+        (out / "bundle.json").write_text(json.dumps(bundle, indent=2), encoding="utf-8")
+        signing.sign_file(out / "bundle.json", role="local")
+        print(json.dumps(gate.to_dict(), indent=2))
+        if not gate.passed:
+            rejected = out.with_name(out.name + "-rejected")
+            if rejected.exists():
+                import shutil
+                shutil.rmtree(rejected)
+            out.rename(rejected)
+            print(f"[!] Regression gate FAILED; bundle kept for inspection at {rejected} and NOT eligible for use.")
+            return 1
+        print("[+] Regression gate passed; bundle is eligible for activation.")
     return 0
 
 
