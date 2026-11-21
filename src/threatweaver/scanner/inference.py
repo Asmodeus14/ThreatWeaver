@@ -22,6 +22,21 @@ from threatweaver.scanner.hash_cache import CleanHashCache
 from threatweaver.scanner.signature_verifier import WindowsSignatureVerifier
 
 
+SHIPPED_CHECKPOINT_DIR = Path("artifacts/checkpoints")
+VERDICT_POLICY_VERSION = "v0.1-policy-2"  # bump whenever verdict logic changes (invalidates cache)
+
+
+def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(chunk_size):
+            h.update(chunk)
+    return h.hexdigest()
+LOCAL_MODELS_DIR = Path("artifacts/models/local")
+
+
 class ScanVerdict(str, Enum):
     """Calibrated security verdict for a scanned file."""
     LIKELY_BENIGN = "Likely Benign"
@@ -65,6 +80,7 @@ class InferenceEngine:
         self.device = torch.device(device)
         self.threshold = classification_threshold
         self.checkpoint_path: Optional[Path] = Path(checkpoint_path).resolve() if checkpoint_path else None
+        self._source_checkpoints: set = set()
         self.model: Optional[ThreatClassifier] = None
         self.scaler: Optional[FeatureScaler] = None
         self.novelty_detector: Optional[NoveltyDetector] = None
@@ -81,6 +97,7 @@ class InferenceEngine:
         """Loads and initializes model from safe checkpoint."""
         ckpt_path = Path(checkpoint_path).resolve()
         self.checkpoint_path = ckpt_path
+        self._source_checkpoints.add(ckpt_path)
         model, meta = load_checkpoint(ckpt_path, device=self.device)
         self.model = model
         self.model.eval()
@@ -111,14 +128,68 @@ class InferenceEngine:
         self.checkpoint_loaded = True
         self.model_version = f"ThreatWeaver-v{meta.get('schema_version', '1.0')}"
 
-    def save_state(self, target_path: Optional[str | Path] = None) -> Path:
-        """Safely saves model weights, scaler statistics, and prototypes with HMAC signature."""
+    def cache_fingerprint(self) -> str:
+        """Identifies everything that can change a verdict for identical file bytes."""
+        import hashlib
+
+        if self.checkpoint_path and self.checkpoint_path.is_file():
+            key = (str(self.checkpoint_path), self.checkpoint_path.stat().st_mtime_ns)
+            if getattr(self, "_ckpt_digest_key", None) != key:
+                self._ckpt_digest = sha256_file(self.checkpoint_path)
+                self._ckpt_digest_key = key
+            ckpt_digest = self._ckpt_digest
+        else:
+            ckpt_digest = "no-model"
+        nd = self.novelty_detector
+        parts = [
+            VERDICT_POLICY_VERSION,
+            ckpt_digest if self.checkpoint_loaded else "no-model",
+            f"thr={self.threshold:.6f}",
+            f"tau={nd.threshold:.6f}" if nd else "tau=none",
+            f"protos={len(nd.prototypes)}" if nd else "protos=0",
+            f"sig={int(self.signature_verifier.enabled)}",
+        ]
+        return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:32]
+
+    def _is_protected_checkpoint(self, path: Path) -> bool:
+        """Shipped checkpoints and any checkpoint this engine loaded from are read-only."""
+        resolved = path.resolve()
+        if resolved in self._source_checkpoints:
+            return True
+        try:
+            resolved.relative_to(SHIPPED_CHECKPOINT_DIR.resolve())
+            return True
+        except ValueError:
+            return False
+
+    def save_state(self, target_path: Optional[str | Path] = None, reason: str = "local update") -> Path:
+        """Saves the current model state as a NEW versioned checkpoint and returns its path.
+
+        Never overwrites a shipped checkpoint (artifacts/checkpoints/) or the file the
+        engine was loaded from. Without target_path, writes
+        artifacts/models/local/<parent-stem>_local_<UTC timestamp>.pt and records the
+        lineage in artifacts/models/local/index.json.
+        """
+        import hashlib
+        import json
+        import time
+
         if self.model is None:
             raise ValueError("Cannot save state: No model loaded.")
-        dest = Path(target_path).resolve() if target_path else self.checkpoint_path
-        if dest is None:
-            dest = Path("artifacts/checkpoints/threatweaver_v1.pt").resolve()
+        if target_path is not None:
+            dest = Path(target_path).resolve()
+            if self._is_protected_checkpoint(dest):
+                raise PermissionError(f"Refusing to overwrite protected checkpoint: {dest}")
+        else:
+            parent_stem = self.checkpoint_path.stem.split("_local_")[0] if self.checkpoint_path else "threatweaver"
+            stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+            dest = (LOCAL_MODELS_DIR / f"{parent_stem}_local_{stamp}.pt").resolve()
+            n = 1
+            while dest.exists():
+                dest = (LOCAL_MODELS_DIR / f"{parent_stem}_local_{stamp}_{n}.pt").resolve()
+                n += 1
         dest.parent.mkdir(parents=True, exist_ok=True)
+        parent_path = str(self.checkpoint_path) if self.checkpoint_path else None
 
         f_mean = self.scaler.mean.tolist() if (self.scaler and self.scaler.fitted) else None
         f_std = self.scaler.std.tolist() if (self.scaler and self.scaler.fitted) else None
@@ -132,10 +203,29 @@ class InferenceEngine:
             feature_std=f_std,
             novelty_threshold=nov_thresh,
             prototypes=protos,
-            metadata={"description": "Active operational ThreatWeaver model with learned prototypes"},
+            metadata={
+                "description": "Locally modified ThreatWeaver model",
+                "parent_checkpoint": parent_path,
+                "reason": reason,
+            },
             sign=True,
         )
         self.checkpoint_path = saved_path
+
+        index_path = saved_path.parent / "index.json"
+        try:
+            index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.is_file() else []
+        except Exception:
+            index = []
+        index.append({
+            "path": str(saved_path),
+            "parent": parent_path,
+            "reason": reason,
+            "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "sha256": hashlib.sha256(saved_path.read_bytes()).hexdigest(),
+            "prototypes": len(protos),
+        })
+        index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
         return saved_path
 
     def register_prototype_from_sample(
@@ -143,7 +233,7 @@ class InferenceEngine:
         file_path: str | Path,
         label: int,
         family_name: str,
-        persist: bool = True,
+        persist: bool = False,
     ) -> Dict[str, Any]:
         """Extracts embedding from sample and registers it as a new prototype centroid (Option A)."""
         p = Path(file_path).resolve()
@@ -179,8 +269,9 @@ class InferenceEngine:
         if self.hash_cache.enabled and extracted.sha256:
             self.hash_cache.remove(extracted.sha256)
 
-        if persist and self.checkpoint_path:
-            self.save_state(self.checkpoint_path)
+        saved_to = None
+        if persist:
+            saved_to = str(self.save_state(reason=f"prototype '{family_name}' registered from {p.name}"))
 
         return {
             "status": "success",
@@ -189,6 +280,7 @@ class InferenceEngine:
             "total_prototypes": len(self.novelty_detector.prototypes),
             "sha256": extracted.sha256,
             "file_name": p.name,
+            "saved_checkpoint": saved_to,
         }
 
 
@@ -221,16 +313,20 @@ class InferenceEngine:
             )
 
         try:
-            stat = path.stat()
-            file_size = stat.st_size
-            mtime = stat.st_mtime
-        except Exception:
+            file_size = path.stat().st_size
+        except OSError:
             file_size = 0
-            mtime = 0.0
 
-        # Tier 0: High-Speed Clean Hash & Reputation Cache Lookup (< 0.05 ms)
-        if self.hash_cache.enabled and not bypass_cache and file_size > 0:
-            cached_res = self.hash_cache.lookup_file(path, mtime=mtime, file_size=file_size)
+        # Content hash first: the cache key is what the file IS, not what its timestamp says.
+        try:
+            file_sha256 = sha256_file(path) if file_size > 0 else ""
+        except OSError:
+            file_sha256 = ""
+        fingerprint = self.cache_fingerprint()
+
+        # Tier 0: cached verdict for identical bytes under the identical engine
+        if self.hash_cache.enabled and not bypass_cache and file_sha256:
+            cached_res = self.hash_cache.lookup(file_sha256, fingerprint, file_path=path)
             if cached_res is not None:
                 return cached_res
 
@@ -239,11 +335,6 @@ class InferenceEngine:
             sig_status = self.signature_verifier.verify_file(path)
             if sig_status.is_trusted:
                 sig_duration = (time.time() - start_t) * 1000.0
-                try:
-                    with open(path, "rb") as f:
-                        file_sha256 = hashlib.sha256(f.read()).hexdigest()
-                except Exception:
-                    file_sha256 = ""
 
                 signer_desc = f" (Signer: {sig_status.subject})" if sig_status.subject else ""
                 sig_res = ScanResult(
@@ -266,7 +357,7 @@ class InferenceEngine:
                     warning_message=None,
                 )
                 if self.hash_cache.enabled and file_sha256:
-                    self.hash_cache.record_scan_result(sig_res, mtime=mtime, source="Authenticode")
+                    self.hash_cache.record_scan_result(sig_res, fingerprint, source="Authenticode")
                 return sig_res
 
         # Tier 2: Static feature extraction
@@ -377,6 +468,6 @@ class InferenceEngine:
         )
 
         if self.hash_cache.enabled and extracted.is_valid_pe and extracted.sha256:
-            self.hash_cache.record_scan_result(res, mtime=mtime, source="Neural")
+            self.hash_cache.record_scan_result(res, fingerprint, source="Neural")
 
         return res

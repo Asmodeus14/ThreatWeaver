@@ -85,7 +85,7 @@ def test_cli_ui_parser(monkeypatch):
     """Validates CLI ui subcommand setup."""
     from threatweaver.app.cli import cmd_ui
     called = []
-    def fake_run_server(port, checkpoint_path, open_browser):
+    def fake_run_server(port, checkpoint_path, open_browser, **kwargs):
         called.append((port, open_browser))
 
     monkeypatch.setattr("threatweaver.app.server.run_server", fake_run_server)

@@ -8,6 +8,7 @@ datas = [
     ('assets/threatweaver.ico', 'assets'),
     ('artifacts/checkpoints/*', 'artifacts/checkpoints'),
     ('samples/*', 'samples'),
+    ('src/threatweaver/models/trusted_keys/*.pub', 'threatweaver/models/trusted_keys'),
 ]
 
 hiddenimports = [
@@ -15,6 +16,8 @@ hiddenimports = [
     'clr',
     'pythonnet',
     'pefile',
+    'cryptography',
+    'threatweaver.models.signing',
     'torch',
     'numpy',
     'sklearn',

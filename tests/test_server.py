@@ -8,9 +8,12 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 import pytest
 
+from threatweaver.app import security
 from threatweaver.app.server import ThreatWeaverRequestHandler, ScanStateManager
 from threatweaver.scanner.inference import InferenceEngine
 from threatweaver.quarantine.manager import QuarantineManager
+
+TEST_TOKEN = "test-session-token"
 
 
 @pytest.fixture(scope="module")
@@ -27,11 +30,19 @@ def test_server():
     # Port 8799 for testing
     port = 8799
     server = ThreadingHTTPServer(("127.0.0.1", port), ThreatWeaverRequestHandler)
+    ThreatWeaverRequestHandler.api_token = TEST_TOKEN
+    ThreatWeaverRequestHandler.allowed_host_set = security.allowed_hosts("127.0.0.1", port)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
+    # Legitimate client: every request carries the session token.
+    opener = urllib.request.build_opener()
+    opener.addheaders = [(security.TOKEN_HEADER, TEST_TOKEN)]
+    urllib.request.install_opener(opener)
+
     yield f"http://127.0.0.1:{port}"
 
+    urllib.request.install_opener(urllib.request.build_opener())
     server.shutdown()
     server.server_close()
 
@@ -71,49 +82,65 @@ def test_server_history_api(test_server: str):
         assert "history" in data
 
 
-def test_server_threat_network_api(test_server: str):
-    """Verifies /api/threat-network GET endpoint returning nodes and similarity edges."""
-    with urllib.request.urlopen(f"{test_server}/api/threat-network") as resp:
+FABRICATED_MARKERS = ("Emotet", "LockBit", "AgentTesla", "a4c281093f61b0c9", "svchost.exe")
+
+
+def _get(url: str):
+    with urllib.request.urlopen(url) as resp:
         assert resp.status == 200
-        data = json.loads(resp.read().decode("utf-8"))
-        assert "nodes" in data
-        assert "edges" in data
-        assert len(data["nodes"]) >= 8
-        # Verify family and sample node attributes
-        has_family = any(n.get("type") == "family" for n in data["nodes"])
-        assert has_family
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def test_server_threat_network_api(test_server: str):
+    """Graph contains only real prototypes/scan results; no invented families or default nodes."""
+    data = _get(f"{test_server}/api/threat-network")
+    for key in ("nodes", "edges", "fs_items", "fs_edges", "available"):
+        assert key in data
+    assert all(n["type"] in ("prototype", "sample") for n in data["nodes"])
+    assert not any(e.get("type") == "inter_family" for e in data["edges"])
+    if not data["available"]:
+        assert data["fs_items"] == [] and data["reason"]
+    raw = json.dumps(data)
+    assert not any(m in raw for m in FABRICATED_MARKERS)
 
 
 def test_server_families_api(test_server: str):
-    """Verifies /api/families GET endpoint returning rich malware family profiles."""
-    with urllib.request.urlopen(f"{test_server}/api/families") as resp:
-        assert resp.status == 200
-        data = json.loads(resp.read().decode("utf-8"))
-        assert "families" in data
-        assert len(data["families"]) >= 5
-        emotet = next(f for f in data["families"] if "Emotet" in f["name"])
-        assert "dominant_apis" in emotet
-        assert emotet["risk"] > 0.8
+    """Families come from the dataset metadata summary, or are explicitly unavailable."""
+    data = _get(f"{test_server}/api/families")
+    assert "families" in data and "available" in data
+    raw = json.dumps(data)
+    assert "dominant_apis" not in raw and "Emotet" not in raw
+    if data["available"]:
+        assert data["kind"] == "dataset_metadata"
+        for fam in data["families"]:
+            assert fam["sample_count"] > 0
+            assert 0.0 <= fam["mean_family_confidence"] <= 1.0
+    else:
+        assert data["families"] == [] and data["reason"]
 
 
 def test_server_timeline_api(test_server: str):
-    """Verifies /api/timeline GET endpoint returning chronological batches and strategy metrics."""
-    with urllib.request.urlopen(f"{test_server}/api/timeline") as resp:
-        assert resp.status == 200
-        data = json.loads(resp.read().decode("utf-8"))
-        assert "batches" in data
-        assert len(data["batches"]) == 5
-        assert "strategies" in data
+    """Timeline carries provenance; synthetic results are labelled as synthetic."""
+    data = _get(f"{test_server}/api/timeline")
+    assert "available" in data
+    if data["available"]:
+        assert data["kind"] in ("benchmark", "synthetic")
+        assert "strategies" in data and "source" in data
+        assert not any(str(b.get("window_start", "")).startswith("2026") for b in data.get("batches", []))
 
 
 def test_server_sample_details_api(test_server: str):
-    """Verifies /api/sample-details GET endpoint."""
-    with urllib.request.urlopen(f"{test_server}/api/sample-details?id=fam-emotet") as resp:
-        assert resp.status == 200
-        data = json.loads(resp.read().decode("utf-8"))
-        assert "node" in data
-        assert "feature_attribution" in data
-        assert "nearest_neighbors" in data
+    """Unknown identifiers return an explicit 'unavailable' answer instead of invented attribution."""
+    data = _get(f"{test_server}/api/sample-details?id=fam-emotet")
+    assert data["available"] is False
+    assert "nearest_neighbors" not in data
+    assert "feature_attribution" not in data or data["feature_attribution"] is None
+
+
+def test_server_status_reports_real_model_and_dataset(test_server: str):
+    data = _get(f"{test_server}/api/status")
+    assert "dataset" in data and "available" in data["dataset"]
+    assert "residual_blocks" in data and "model_kind" in data
 
 
 def test_server_settings_api(test_server: str):
@@ -149,12 +176,18 @@ def test_server_full_system_scan_api(tmp_path: Path):
     httpd = HTTPServer(("127.0.0.1", 0), ThreatWeaverRequestHandler)
     port = httpd.server_address[1]
     base_url = f"http://127.0.0.1:{port}"
+    ThreatWeaverRequestHandler.api_token = TEST_TOKEN
+    ThreatWeaverRequestHandler.allowed_host_set = security.allowed_hosts("127.0.0.1", port)
 
     t = threading.Thread(target=httpd.serve_forever, daemon=True)
     t.start()
     try:
         payload = json.dumps({"scan_mode": "full_system"}).encode("utf-8")
-        req = urllib.request.Request(f"{base_url}/api/scan", data=payload, headers={"Content-Type": "application/json"})
+        req = urllib.request.Request(
+            f"{base_url}/api/scan",
+            data=payload,
+            headers={"Content-Type": "application/json", security.TOKEN_HEADER: TEST_TOKEN},
+        )
         with urllib.request.urlopen(req) as resp:
             data = json.loads(resp.read().decode())
             assert data["status"] == "started"

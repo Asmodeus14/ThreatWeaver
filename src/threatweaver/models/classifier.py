@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
-import hmac
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import warnings
@@ -13,10 +12,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from threatweaver.models import signing
 from threatweaver.models.encoder import ThreatEncoder
 
 SCHEMA_VERSION = "1.0"
-CHECKPOINT_HMAC_KEY = b"ThreatWeaver-v1.0-checkpoint-integrity-key-9b7a"
 
 
 
@@ -82,33 +81,21 @@ class ThreatClassifier(nn.Module):
         )
 
 
-def compute_checkpoint_signature(checkpoint_bytes: bytes, key: bytes = CHECKPOINT_HMAC_KEY) -> str:
-    """Computes HMAC-SHA256 signature for checkpoint file bytes."""
-    return hmac.new(key, checkpoint_bytes, hashlib.sha256).hexdigest()
+def compute_checkpoint_signature(checkpoint_bytes: bytes) -> str:
+    """Returns the SHA-256 digest of checkpoint bytes (integrity fingerprint, not a signature).
 
-
-def verify_checkpoint_file(
-    checkpoint_path: str | Path,
-    key: bytes = CHECKPOINT_HMAC_KEY,
-) -> Tuple[bool, str]:
-    """Verifies HMAC signature of a checkpoint if signature file exists.
-
-    Returns (is_valid, reason).
+    Kept for API compatibility; authenticity is provided by Ed25519 (threatweaver.models.signing).
     """
-    path = Path(checkpoint_path).resolve()
-    sig_path = path.with_suffix(path.suffix + ".sig")
-    if not sig_path.is_file():
-        return True, "No signature file found (unsigned legacy checkpoint)"
+    return hashlib.sha256(checkpoint_bytes).hexdigest()
 
-    try:
-        expected_sig = sig_path.read_text(encoding="utf-8").strip()
-        data = path.read_bytes()
-        actual_sig = compute_checkpoint_signature(data, key)
-        if hmac.compare_digest(expected_sig, actual_sig):
-            return True, "Signature valid"
-        return False, f"Signature mismatch (expected {expected_sig[:12]}..., got {actual_sig[:12]}...)"
-    except Exception as e:
-        return False, f"Error verifying signature: {str(e)}"
+
+def verify_checkpoint_file(checkpoint_path: str | Path) -> Tuple[bool, str]:
+    """Verifies the Ed25519 signature of a checkpoint. Returns (is_valid, reason).
+
+    Unsigned checkpoints are reported as NOT valid (fail-closed).
+    """
+    result = signing.verify_file(Path(checkpoint_path).resolve())
+    return result.valid, result.reason
 
 
 def save_checkpoint(
@@ -142,11 +129,11 @@ def save_checkpoint(
 
     torch.save(payload, path)
 
+    stale_sig = signing.signature_path(path)
     if sign:
-        data = path.read_bytes()
-        sig = compute_checkpoint_signature(data)
-        sig_path = path.with_suffix(path.suffix + ".sig")
-        sig_path.write_text(sig, encoding="utf-8")
+        signing.sign_file(path, role="local")
+    elif stale_sig.is_file():
+        stale_sig.unlink()  # never leave a signature describing different bytes
 
     return path
 
@@ -154,25 +141,29 @@ def save_checkpoint(
 def load_checkpoint(
     checkpoint_path: str | Path,
     device: torch.device | str = "cpu",
-    enforce_signature: bool = False,
+    enforce_signature: bool = True,
+    allow_unsigned: bool = False,
 ) -> Tuple[ThreatClassifier, Dict[str, Any]]:
-    """Safely loads model weights and metadata from checkpoint with validation."""
+    """Loads model weights and metadata after verifying the checkpoint's Ed25519 signature.
+
+    Fail-closed: unsigned, tampered or untrusted checkpoints raise ValueError unless
+    allow_unsigned=True (or THREATWEAVER_ALLOW_UNSIGNED_MODELS=1), which only emits a warning.
+    ``enforce_signature`` is kept for backward compatibility; enforcement is now the default.
+    """
     path = Path(checkpoint_path).resolve()
     if not path.is_file():
         raise FileNotFoundError(f"Checkpoint not found at: {path}")
 
-    # Integrity verification
-    valid, reason = verify_checkpoint_file(path)
-    if not valid:
-        raise ValueError(f"Checkpoint integrity verification failed for {path}: {reason}")
-    if "No signature file" in reason:
-        if enforce_signature:
-            raise ValueError(f"Checkpoint {path} is unsigned and enforce_signature=True.")
-        warnings.warn(
-            f"Loading unsigned checkpoint from {path.name}. Signatures are recommended for production models.",
-            UserWarning,
-            stacklevel=2,
-        )
+    result = signing.verify_file(path)
+    if not result.valid:
+        if signing.unsigned_allowed(allow_unsigned):
+            warnings.warn(
+                f"Loading unsigned or unverified checkpoint {path.name} ({result.reason}). Research use only.",
+                UserWarning,
+                stacklevel=2,
+            )
+        else:
+            raise ValueError(f"Checkpoint integrity verification failed for {path}: {result.reason}")
 
     # Hardened deserialization with weights_only=True
     try:

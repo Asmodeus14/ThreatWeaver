@@ -384,7 +384,7 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
 
 
 def cmd_verify_checkpoint(args: argparse.Namespace) -> int:
-    """Verifies cryptographic HMAC signature and integrity of a model checkpoint."""
+    """Verifies the Ed25519 signature and integrity of a model checkpoint."""
     from threatweaver.models.classifier import verify_checkpoint_file
 
     target_ckpt = Path(args.path).resolve()
@@ -394,8 +394,11 @@ def cmd_verify_checkpoint(args: argparse.Namespace) -> int:
         console.print(f"[bold red]Error: Checkpoint file not found: {target_ckpt}[/bold red]")
         return 1
 
+    from threatweaver.models import signing
+    import hashlib
+
     valid, reason = verify_checkpoint_file(target_ckpt)
-    sig_path = target_ckpt.with_suffix(".pt.sig")
+    sig_path = signing.signature_path(target_ckpt)
 
     table = Table(title="Model Checkpoint Integrity Check", border_style="cyan")
     table.add_column("Property", style="bold white", width=22)
@@ -404,8 +407,14 @@ def cmd_verify_checkpoint(args: argparse.Namespace) -> int:
     table.add_row("Checkpoint Path", str(target_ckpt))
     table.add_row("File Size", f"{target_ckpt.stat().st_size / 1024:.1f} KB")
     table.add_row("Signature File", str(sig_path) if sig_path.exists() else "Missing (Unsigned)")
+    table.add_row("File SHA-256", hashlib.sha256(target_ckpt.read_bytes()).hexdigest())
     if sig_path.exists():
-        table.add_row("HMAC-SHA256 Hash", sig_path.read_text(encoding="utf-8").strip())
+        try:
+            import json as _json
+            rec = _json.loads(sig_path.read_text(encoding="utf-8"))
+            table.add_row("Signer Key / Role", f"{rec.get('key_id')} ({rec.get('role')})")
+        except Exception:
+            table.add_row("Signer Key / Role", "unreadable")
     table.add_row(
         "Verification Status",
         "[bold green]AUTHENTIC & VALID[/bold green]" if valid and sig_path.exists() else (
@@ -423,10 +432,13 @@ def cmd_ui(args: argparse.Namespace) -> int:
     from threatweaver.app.server import run_server
     host = getattr(args, "host", "127.0.0.1")
     console.print(f"[bold cyan]Launching ThreatWeaver Apple Minimalist UI on http://{host}:{args.port}...[/bold cyan]")
-    try:
-        run_server(host=host, port=args.port, checkpoint_path=args.checkpoint, open_browser=not args.no_browser)
-    except TypeError:
-        run_server(port=args.port, checkpoint_path=args.checkpoint, open_browser=not args.no_browser)
+    run_server(
+        host=host,
+        port=args.port,
+        checkpoint_path=args.checkpoint,
+        open_browser=not args.no_browser,
+        print_token=getattr(args, "print_token", False),
+    )
     return 0
 
 
@@ -455,6 +467,7 @@ def main() -> None:
     p_ui.add_argument("--port", type=int, default=8765, help="HTTP port (default: 8765)")
     p_ui.add_argument("--checkpoint", default=None, help="Model checkpoint path")
     p_ui.add_argument("--no-browser", action="store_true", help="Do not automatically open browser")
+    p_ui.add_argument("--print-token", action="store_true", help="Print the per-session API token for scripted access")
 
     # app / desktop subcommand
     p_app = subparsers.add_parser("app", help="Launch the ThreatWeaver Windows Desktop Application")

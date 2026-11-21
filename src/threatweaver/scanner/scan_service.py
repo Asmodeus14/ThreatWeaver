@@ -18,6 +18,9 @@ PE_EXTENSIONS: Set[str] = {
     ".exe", ".dll", ".sys", ".scr", ".cpl", ".ocx", ".efi", ".drv"
 }
 
+# Directories skipped during traversal. Only OS component stores (signed, serviced by Windows)
+# and developer tool caches are skipped. Temp, browser-cache, download and installer-cache
+# folders are deliberately NOT skipped: they are the most common malware staging locations.
 SYSTEM_SKIP_DIRS: Set[str] = {
     "$recycle.bin",
     "system volume information",
@@ -25,13 +28,6 @@ SYSTEM_SKIP_DIRS: Set[str] = {
     "servicing",
     "softwaredistribution",
     "driverstore",
-    "package cache",
-    "installer",
-    "temp",
-    "tmp",
-    "cache",
-    "caches",
-    "inetcache",
     "assembly",
     ".git",
     ".venv",

@@ -15,6 +15,7 @@ def get_apple_minimalist_html() -> str:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="tw-token" content="__TW_API_TOKEN__">
 <title>ThreatWeaver — Research Workstation</title>
 <style>
 :root{
@@ -359,16 +360,16 @@ th{color:var(--muted);font-weight:550;letter-spacing:.02em;text-transform:upperc
     <div class="title" id="pageTitle">Overview</div>
     <div class="subtitle" id="pageSub">Observe, represent, connect.</div>
   </div>
-  <div class="pill apple-glass" id="datasetPill">EMBER2024 · 1,086,315 SAMPLES · VERIFIED</div>
+  <div class="pill apple-glass" id="datasetPill">Dataset: loading…</div>
 </header>
 
 <!-- 1. OVERVIEW SCREEN -->
 <section id="overview" class="screen active">
   <div class="grid">
-    <div class="card"><div class="k">EMBER2024 SAMPLES</div><div class="v" id="cardSamples">1,086,315</div><div class="small">0 corrupt records · 17.8 GB</div></div>
-    <div class="card"><div class="k">BENIGN DATASET</div><div class="v" id="cardBenign">540,000</div><div class="small">49.7% balanced clean corpus</div></div>
-    <div class="card"><div class="k">MALICIOUS SAMPLES</div><div class="v" id="cardMal">546,315</div><div class="small">50.3% confirmed threats</div></div>
-    <div class="card"><div class="k">NEURAL ARCHITECTURE</div><div class="v">ResMLP</div><div class="small" id="statNeuralArch">256-D static → 128-D L2 (T=0.93)</div></div>
+    <div class="card"><div class="k">LOCAL DATASET RECORDS</div><div class="v" id="cardSamples">—</div><div class="small" id="cardSamplesSub">From artifacts/dataset/ember2024_manifest.json</div></div>
+    <div class="card"><div class="k">BENIGN RECORDS</div><div class="v" id="cardBenign">—</div><div class="small" id="cardBenignSub">&nbsp;</div></div>
+    <div class="card"><div class="k">MALICIOUS RECORDS</div><div class="v" id="cardMal">—</div><div class="small" id="cardMalSub">&nbsp;</div></div>
+    <div class="card"><div class="k">ACTIVE MODEL</div><div class="v" id="cardModelKind">—</div><div class="small" id="statNeuralArch">loading…</div></div>
   </div>
   <div class="two">
     <div class="card">
@@ -437,7 +438,7 @@ th{color:var(--muted);font-weight:550;letter-spacing:.02em;text-transform:upperc
     <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:16px">
       <div>
         <h3 style="margin:0 0 4px 0">Static Binary Inspection</h3>
-        <p style="margin:0;color:var(--muted);font-size:12.5px">Zero-execution PE structural analysis and 128-D ResMLP representation triage.</p>
+        <p style="margin:0;color:var(--muted);font-size:12.5px">Zero-execution PE structural analysis and neural representation triage.</p>
       </div>
       <!-- Mode Tabs: Custom Target vs Full System Scan -->
       <div style="display:flex;background:#ebebea;border-radius:8px;padding:3px;gap:2px">
@@ -555,7 +556,7 @@ th{color:var(--muted);font-weight:550;letter-spacing:.02em;text-transform:upperc
       <div>
         <div style="display:flex;align-items:center;gap:10px">
           <h3 style="margin:0;font-size:15px">Real-Time 3D Neural Inference Pipeline</h3>
-          <span class="badge" style="background:#e8f4fd;color:#0969da;font-weight:600;font-size:10px">128-D ResMLP Optimum</span>
+          <span class="badge" style="background:#f4f4f2;color:#555;font-weight:600;font-size:10px">Illustrative architecture view</span>
         </div>
         <p style="margin:3px 0 0;font-size:12px;color:#666">Live 3D spatial trace demonstrating how each inspected PE binary passes through ThreatWeaver's ResMLP neural layers.</p>
       </div>
@@ -680,7 +681,7 @@ th{color:var(--muted);font-weight:550;letter-spacing:.02em;text-transform:upperc
           <span class="nl-dot" id="nlDot4"></span>
         </div>
         <div style="font-size:12px;font-weight:600;margin-top:4px">Latent Manifold</div>
-        <div class="small" style="color:#777;margin-top:2px">128-D Representation</div>
+        <div class="small" style="color:#777;margin-top:2px">Embedding Representation</div>
         <div style="margin-top:6px;font-size:10.5px;color:#444;line-height:1.5">
           <div>Bottleneck: <span id="nlValLatent" style="font-weight:600">128 features</span></div>
           <div>Manifold: <span style="font-weight:600;color:#0969da">Continuous</span></div>
@@ -744,7 +745,7 @@ th{color:var(--muted);font-weight:550;letter-spacing:.02em;text-transform:upperc
       <div>
         <h3 style="margin:0 0 4px 0">Active Continual Learning & Online Adaptation</h3>
         <p style="margin:0;font-size:12.5px;color:#666">
-          Adapt the active 128-D ResMLP pipeline to unfamiliar threats in real time. <b>Option A</b> registers instant 128-D prototypes into the Cosine Novelty gate without neural weight perturbation, while <b>Option B</b> executes continual replay fine-tuning with strict catastrophic forgetting protection.
+          Adapt the active model to unfamiliar threats in real time. <b>Option A</b> registers instant prototypes into the Cosine Novelty gate without neural weight perturbation, while <b>Option B</b> executes continual replay fine-tuning with strict catastrophic forgetting protection.
         </p>
       </div>
       <div style="display:flex;gap:8px">
@@ -774,7 +775,7 @@ th{color:var(--muted);font-weight:550;letter-spacing:.02em;text-transform:upperc
       <!-- Prototypes Card -->
       <div style="background:#fafaf8;border:1px solid #e5e5ea;border-radius:10px;padding:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <b>Active 128-D Cosine Prototypes (Novelty Gate)</b>
+          <b>Active Cosine Prototypes (Novelty Gate)</b>
           <span class="badge good" id="protoCountBadge">0 registered</span>
         </div>
         <div style="max-height:220px;overflow-y:auto;overflow-x:auto">
@@ -800,24 +801,13 @@ th{color:var(--muted);font-weight:550;letter-spacing:.02em;text-transform:upperc
 
   <div class="card">
     <h3>Chronological Continual Learning & Drift Adaptation</h3>
-    <p>Measures catastrophic forgetting across non-stationary temporal batches (T1 → T5) from official EMBER2024.</p>
-    <div class="timeline">
-      <div class="t active">T1<div class="metric">Sep 2024</div></div><div class="line"></div>
-      <div class="t">T2<div class="metric">Sep 2024</div></div><div class="line"></div>
-      <div class="t">T3<div class="metric">Oct 2024</div></div><div class="line"></div>
-      <div class="t">T4<div class="metric">Nov 2024</div></div><div class="line"></div>
-      <div class="t">T5<div class="metric">Dec 2024</div></div>
-    </div>
+    <p id="clSourceNote">Loading continual-learning results…</p>
+    <div class="timeline" id="clTimeline"></div>
     <table style="margin-top:20px">
       <thead>
-        <tr><th>Strategy</th><th>Catastrophic Forgetting (F_T)</th><th>Backward Transfer</th><th>Final Macro-F1</th><th>Final FPR</th><th>Empirical Outcome</th></tr>
+        <tr><th>Strategy</th><th>Catastrophic Forgetting (F_T)</th><th>Backward Transfer</th><th>Final Macro-F1</th><th>Final FPR</th><th>Training time</th></tr>
       </thead>
-      <tbody>
-        <tr><td>No Replay (Fine-Tuning)</td><td>0.0481</td><td>-0.0481</td><td>0.9181</td><td>8.12%</td><td>Baseline degradation</td></tr>
-        <tr><td>Random Replay</td><td>0.0315</td><td>-0.0315</td><td>0.9350</td><td>9.22%</td><td>Preserves common patterns</td></tr>
-        <tr><td>Uncertainty Replay</td><td>0.0349</td><td>-0.0349</td><td>0.9308</td><td>7.56%</td><td>Samples decision boundary</td></tr>
-        <tr style="background:#fcfcfa;font-weight:600"><td><b>Uncertainty + Diversity (ThreatWeaver)</b></td><td><b>0.0278</b></td><td>-0.0278</td><td><b>0.9370</b></td><td><b>7.30%</b></td><td><span class="badge good">Best: 42.2% forgetting reduction</span></td></tr>
-      </tbody>
+      <tbody id="clStrategyTbody"><tr><td colspan="6" style="text-align:center;color:#888">Loading…</td></tr></tbody>
     </table>
   </div>
 </section>
@@ -829,10 +819,10 @@ th{color:var(--muted);font-weight:550;letter-spacing:.02em;text-transform:upperc
       <div>
         <div style="display:flex;align-items:center;gap:10px">
           <h3 style="margin:0;font-size:16px">ResMLP Neural Representation Pipeline</h3>
-          <span class="badge" style="background:#e8f4fd;color:#0969da;font-weight:600;font-size:10.5px">Empirically Validated 128-D Optimum</span>
+          <span class="badge" style="background:#f4f4f2;color:#555;font-weight:600;font-size:10.5px">Values read from the loaded checkpoint</span>
         </div>
         <p style="margin:4px 0 0;font-size:12px;color:#666">
-          Architectural specification of ThreatWeaver's ResMLP encoder, identity skip pathways, 128-D L2-normalized unit hypersphere manifold, and calibrated dual decision heads.
+          Architecture of the loaded checkpoint (values below are read from the model itself): encoder, L2-normalized embedding, and calibrated dual decision heads.
         </p>
       </div>
       <div>
@@ -851,23 +841,23 @@ th{color:var(--muted);font-weight:550;letter-spacing:.02em;text-transform:upperc
       </div>
       <div style="border-left:3px solid #0969da;padding-left:10px">
         <div style="font-size:10px;text-transform:uppercase;color:#888;letter-spacing:0.04em">ResMLP Depth</div>
-        <div style="font-size:12.5px;font-weight:600;margin-top:2px">2 Residual Blocks</div>
+        <div style="font-size:12.5px;font-weight:600;margin-top:2px" id="chipResBlocks">—</div>
         <div style="font-size:10.5px;color:#666">Identity skip connections: x + F(x)</div>
       </div>
       <div style="border-left:3px solid #0969da;padding-left:10px">
         <div style="font-size:10px;text-transform:uppercase;color:#888;letter-spacing:0.04em">Latent Manifold</div>
-        <div style="font-size:12.5px;font-weight:600;margin-top:2px">128-D L2 Hypersphere</div>
-        <div style="font-size:10.5px;color:#666">Unit norm: ‖z‖₂ = 1 (Ablation optimum)</div>
+        <div style="font-size:12.5px;font-weight:600;margin-top:2px" id="chipEmbDim">—</div>
+        <div style="font-size:10.5px;color:#666">Unit norm: ‖z‖₂ = 1</div>
       </div>
       <div style="border-left:3px solid #b42318;padding-left:10px">
         <div style="font-size:10px;text-transform:uppercase;color:#888;letter-spacing:0.04em">Supervised Head</div>
         <div style="font-size:12.5px;font-weight:600;margin-top:2px">Calibrated Softmax</div>
-        <div style="font-size:10.5px;color:#666">Temperature T = 0.93 · P(Malware)</div>
+        <div style="font-size:10.5px;color:#666" id="chipTemp">—</div>
       </div>
       <div style="border-left:3px solid #6c5ce7;padding-left:10px">
         <div style="font-size:10px;text-transform:uppercase;color:#888;letter-spacing:0.04em">Metric Head</div>
         <div style="font-size:12.5px;font-weight:600;margin-top:2px">Cosine Novelty Gate</div>
-        <div style="font-size:10.5px;color:#666">Calibrated threshold τ = 0.3433 (OOD)</div>
+        <div style="font-size:10.5px;color:#666" id="chipTau">—</div>
       </div>
     </div>
   </div>
@@ -875,36 +865,14 @@ th{color:var(--muted);font-weight:550;letter-spacing:.02em;text-transform:upperc
     <div class="card" style="margin-top:14px">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <h3>Empirical Embedding Dimension Ablation Study (EMBER2024)</h3>
-        <span class="badge" style="background:#e8f5e9;color:#2e7d32;font-size:11px;font-weight:600">Validated Optimum: 128-D</span>
+        <span class="badge" id="ablationSelectedBadge" style="font-size:11px;font-weight:600">—</span>
       </div>
       <p style="margin-top:6px;font-size:12px;color:#555;line-height:1.5">
-        Rigorous empirical ablation study evaluating 6 candidate dimensions (32, 64, 96, 128, 192, 256) across 3 random seeds (42, 1337, 2026) under identical chronological splits (70% Train, 15% Val, 15% Untouched Test). <b>128-D</b> achieved the optimal Pareto utility trade-off between Macro-F1 (0.8744), PR-AUC (0.9327), Novelty AUROC (0.5957), and inference latency (0.002 ms).
-      </p>
+        <span id="ablationNote">Loading…</span></p>
       <div style="overflow-x:auto;margin-top:10px">
         <table class="table" style="font-size:11.5px">
-          <thead>
-            <tr style="background:#f4f4f2">
-              <th>Dimension</th>
-              <th>Macro-F1 (±1 SD)</th>
-              <th>ROC-AUC</th>
-              <th>PR-AUC</th>
-              <th>Novelty AUROC</th>
-              <th>Continual Forgetting</th>
-              <th>Latency (ms)</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td>32-D</td><td>0.8646 ± 0.0006</td><td>0.9473</td><td>0.9281</td><td>0.5421</td><td>0.1325</td><td>0.002 ms</td><td>Baseline</td></tr>
-            <tr><td>64-D</td><td>0.8734 ± 0.0042</td><td>0.9476</td><td>0.9255</td><td>0.6035</td><td>0.1280</td><td>0.003 ms</td><td>Pareto Optimal</td></tr>
-            <tr><td>96-D</td><td>0.8677 ± 0.0075</td><td>0.9464</td><td>0.9238</td><td>0.5956</td><td>0.1240</td><td>0.002 ms</td><td>Candidate</td></tr>
-            <tr style="background:#eef6ff;font-weight:600">
-              <td>128-D</td><td>0.8744 ± 0.0017</td><td>0.9484</td><td>0.9327</td><td>0.5957</td><td>0.1098</td><td>0.002 ms</td>
-              <td><span class="badge" style="background:#d4edda;color:#155724;font-size:10.5px">Selected Optimum (Locked)</span></td>
-            </tr>
-            <tr><td>192-D</td><td>0.8771 ± 0.0050</td><td>0.9514</td><td>0.9300</td><td>0.5308</td><td>0.1150</td><td>0.003 ms</td><td>High Capacity</td></tr>
-            <tr><td>256-D</td><td>0.8721 ± 0.0015</td><td>0.9467</td><td>0.9226</td><td>0.6152</td><td>0.1120</td><td>0.003 ms</td><td>Over-parameterized</td></tr>
-          </tbody>
+          <thead id="ablationThead"></thead>
+          <tbody id="ablationTbody"><tr><td style="text-align:center;color:#888">Loading ablation results…</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -917,7 +885,7 @@ th{color:var(--muted);font-weight:550;letter-spacing:.02em;text-transform:upperc
     <div style="display:flex;justify-content:space-between;align-items:center">
       <div>
         <h3>Safe Reversible Quarantine Vault</h3>
-        <p>Isolated files are encrypted with unique keys. Symlink protection and non-root guards enforced.</p>
+        <p>Quarantined files are stored XOR-masked (key 0x5A) so they cannot run by accident. This is neutralization, not encryption. Critical Windows paths are protected.</p>
       </div>
       <button class="btn" onclick="refreshQuarantine()">Refresh Vault</button>
     </div>
@@ -1016,10 +984,39 @@ th{color:var(--muted);font-weight:550;letter-spacing:.02em;text-transform:upperc
 </div>
 
 <script>
+// Every /api request carries the per-session token the server embedded in this page.
+(function () {
+  const meta = document.querySelector('meta[name="tw-token"]');
+  const token = meta ? meta.content : "";
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = function (input, init) {
+    init = init || {};
+    const url = (typeof input === "string") ? input : (input && input.url) || "";
+    if (url.startsWith("/api/")) {
+      const headers = new Headers(init.headers || {});
+      headers.set("X-ThreatWeaver-Token", token);
+      if (init.body !== undefined && init.body !== null && !headers.has("Content-Type")) {
+        headers.set("Content-Type", "application/json");
+      }
+      init.headers = headers;
+    }
+    return nativeFetch(input, init);
+  };
+})();
+
 function setTxt(id, val) {
   let el = document.getElementById(id);
   if (el) el.textContent = val;
 }
+
+function escapeHtml(v) {
+  return String(v === undefined || v === null ? "" : v)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+const fmtNum = (v, d = 4) => (typeof v === "number" && isFinite(v)) ? v.toFixed(d) : "—";
+const fmtPct = (v, d = 2) => (typeof v === "number" && isFinite(v)) ? (v * 100).toFixed(d) + "%" : "—";
 
 const screens = {
   overview: ["Overview", "Observe, represent, connect."],
@@ -1109,7 +1106,7 @@ function submitOptionA() {
     }
     closeAdaptModal();
     alert(`Prototype Registered!
-Family: '${data.family_name}' (128-D Centroid)
+Family: '${data.family_name}' (embedding centroid)
 Total Prototypes: ${data.total_prototypes}
 
 Future scans of this variant will now be recognized as familiar!`);
@@ -1285,7 +1282,7 @@ Adapted: ${res.samples_adapted} new sample(s)
 Replay Exemplars: ${res.replay_samples_used} samples
 Forgetting Delta: ${res.catastrophic_forgetting_delta}
 
-Model weights and 128-D prototypes updated and reloaded live!`);
+Model weights and prototypes updated and reloaded live!`);
     loadAdaptationQueue();
     loadPrototypesList();
   })
@@ -1339,34 +1336,8 @@ window.addEventListener("hashchange", () => {
 });
 
 // FILESYSTEM THREAT WEB IMPLEMENTATION
-let currentFsItems = [
-  {name:"C:\\Windows",kind:"folder",state:"benign",x:.50,y:.50,path:"C:\\Windows"},
-  {name:"System32",kind:"folder",state:"benign",x:.31,y:.26,path:"C:\\Windows\\System32"},
-  {name:"SysWOW64",kind:"folder",state:"benign",x:.70,y:.25,path:"C:\\Windows\\SysWOW64"},
-  {name:"Program Files",kind:"folder",state:"benign",x:.18,y:.62,path:"C:\\Program Files"},
-  {name:"Users\\Public",kind:"folder",state:"suspicious",x:.80,y:.63,path:"C:\\Users\\Public"},
-  {name:"svchost.exe",kind:"file",state:"benign",x:.31,y:.13,prob:.012,novel:.08,sha256:"4a2b1c8f9e013456",path:"C:\\Windows\\System32\\svchost.exe",evidence:["Standard Windows Service Host","Signed Microsoft PE"]},
-  {name:"kernel32.dll",kind:"file",state:"benign",x:.20,y:.31,prob:.005,novel:.04,sha256:"1c8f9e0134564a2b",path:"C:\\Windows\\System32\\kernel32.dll",evidence:["Core Win32 Subsystem Library","Valid Authenticode"]},
-  {name:"explorer.exe",kind:"file",state:"benign",x:.40,y:.19,prob:.204,novel:.36,sha256:"eee089fe6f92019a",path:"C:\\Windows\\explorer.exe",evidence:["Windows GUI Shell","Calibrated Benign"]},
-  {name:"winlogon.exe",kind:"file",state:"benign",x:.41,y:.35,prob:.018,novel:.11,sha256:"9e0134564a2b1c8f",path:"C:\\Windows\\System32\\winlogon.exe",evidence:["Logon Management Process"]},
-  {name:"rundll32.exe",kind:"file",state:"suspicious",x:.23,y:.43,prob:.782,novel:.18,sha256:"34564a2b1c8f9e01",path:"C:\\Windows\\System32\\rundll32.exe",evidence:["Dynamic DLL Execution Host","Suspicious Process Pattern"]},
-  {name:"taskhostw.exe",kind:"file",state:"benign",x:.52,y:.30,prob:.015,novel:.09,sha256:"564a2b1c8f9e0134",path:"C:\\Windows\\System32\\taskhostw.exe",evidence:["Task Host Container"]},
-  {name:"runtime.dll",kind:"file",state:"benign",x:.12,y:.76,prob:.032,novel:.12,sha256:"7a8b9c0d1e2f3a4b",path:"C:\\Program Files\\Runtime\\runtime.dll",evidence:["Standard C++ Runtime Library"]},
-  {name:"updater.exe",kind:"file",state:"novel",x:.25,y:.73,prob:.184,novel:.67,sha256:"8b9c0d1e2f3a4b5c",path:"C:\\Program Files\\App\\updater.exe",evidence:["Out-of-Distribution Custom Packer","Low Malicious Signal"]},
-  {name:"update.exe",kind:"file",state:"threat",x:.72,y:.74,prob:.964,novel:.67,sha256:"9c0d1e2f3a4b5c6d",path:"C:\\Users\\Public\\update.exe",evidence:["Process Injection: VirtualAllocEx","Polymorphic Payload","Dynamic Load: GetProcAddress"]},
-  {name:"helper.exe",kind:"file",state:"threat",x:.88,y:.52,prob:.914,novel:.58,sha256:"0d1e2f3a4b5c6d7e",path:"C:\\Users\\Public\\helper.exe",evidence:["Evasion: IsDebuggerPresent","Persistence: RegSetValueExW","Suspicious Network: WSASend"]},
-  {name:"cache.bin",kind:"file",state:"suspicious",x:.78,y:.78,prob:.720,novel:.44,sha256:"1e2f3a4b5c6d7e8f",path:"C:\\Users\\Public\\cache.bin",evidence:["High Entropy Shellcode Section","Zeroed Compilation Timestamp"]},
-  {name:"readme.txt",kind:"file",state:"benign",x:.91,y:.69,prob:.001,novel:.04,sha256:"2f3a4b5c6d7e8f90",path:"C:\\Users\\Public\\readme.txt",evidence:["Plain Text Document"]},
-  {name:"payload.dll",kind:"file",state:"threat",x:.64,y:.86,prob:.991,novel:.72,sha256:"3a4b5c6d7e8f9012",path:"C:\\Users\\Public\\payload.dll",evidence:["LockBit Ransomware Signature","Reflective DLL Loader","High Encryption Entropy"]},
-  {name:"service.dll",kind:"file",state:"suspicious",x:.08,y:.54,prob:.610,novel:.29,sha256:"4b5c6d7e8f901234",path:"C:\\Program Files\\Common\\service.dll",evidence:["Service Registration API Hooking","Missing ASLR Protection"]},
-  {name:"installer.tmp",kind:"file",state:"novel",x:.53,y:.78,prob:.140,novel:.51,sha256:"5c6d7e8f90123456",path:"C:\\Temp\\installer.tmp",evidence:["Unfamiliar Compression Archive","Novel PE Section Topography"]},
-  {name:"chrome_update.exe",kind:"file",state:"threat",x:.46,y:.91,prob:.947,novel:.63,sha256:"6d7e8f9012345678",path:"C:\\Temp\\chrome_update.exe",evidence:["Emotet Downloader Mimicry","Process Injection","C2 Beaconing"]}
-];
-let currentFsEdges = [
-  [0,1],[0,2],[0,3],[0,4],[1,5],[1,6],[1,7],[1,8],[1,9],[1,10],
-  [3,11],[3,12],[4,13],[4,14],[4,15],[4,16],[4,17],[3,18],[0,19],[0,20],
-  [13,14],[13,15],[13,17],[17,20],[12,19],[9,18],[2,10]
-];
+let currentFsItems = [];
+let currentFsEdges = [];
 
 function setupWebCanvas(c) {
   let dpr = window.devicePixelRatio || 1;
@@ -1403,6 +1374,14 @@ function setupWebCanvas(c) {
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = "#fcfcfa";
     ctx.fillRect(0, 0, w, h);
+    if (!currentFsItems.length) {
+      ctx.fillStyle = "#888";
+      ctx.font = "13px -apple-system, Segoe UI, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("No scan results yet — run a scan to map files.", w / 2, h / 2);
+      ctx.textAlign = "start";
+      return;
+    }
 
     // Draw background relationship threads
     currentFsEdges.forEach(e => {
@@ -1587,8 +1566,8 @@ function setupWebCanvas(c) {
       render();
     },
     updateData: (items, edges) => {
-      if (items && items.length) currentFsItems = items;
-      if (edges && edges.length) currentFsEdges = edges;
+      currentFsItems = items || [];
+      currentFsEdges = edges || [];
       sel = -1;
       updateStats();
       render();
@@ -1598,13 +1577,13 @@ function setupWebCanvas(c) {
 
 function renderInspector(n) {
   let isFile = n.kind === "file";
-  let probVal = (n.prob !== undefined) ? n.prob : 0.03;
-  let statusBadge = (n.state === "threat") ? '<span class="badge danger">Threat (Flagged)</span>' :
+  let probVal = (typeof n.prob === "number") ? n.prob : null;
+  let statusBadge = (n.state === "threat") ? '<span class="badge danger">Flagged by model</span>' :
                     (n.state === "suspicious") ? '<span class="badge warning">Suspicious</span>' :
                     (n.state === "novel") ? '<span class="badge novel">Novel / OOD</span>' :
                     '<span class="badge good">Likely Benign</span>';
 
-  let evidenceList = (n.evidence && n.evidence.length) ? n.evidence.join(" · ") : "Standard PE structure";
+  let evidenceList = (n.evidence && n.evidence.length) ? n.evidence.map(escapeHtml).join(" · ") : "No indicators recorded";
 
   let detailHtml = `
     <h3>${isFile ? "File Selection" : "Directory Hub"}</h3>
@@ -1613,9 +1592,9 @@ function renderInspector(n) {
       <div class="row"><span>Type</span><span>${isFile ? "PE Binary" : "Filesystem Directory"}</span></div>
       <div class="row"><span>Status</span><span>${statusBadge}</span></div>
       ${isFile ? `
-        <div class="row"><span>Malware Probability</span><span>${(probVal * 100).toFixed(1)}%</span></div>
-        <div class="risk"><i style="width:${Math.max(4, Math.min(100, probVal * 100))}%;background:${n.state==='threat'?'#b42318':n.state==='suspicious'?'#a15c00':'#237a4b'}"></i></div>
-        <div class="row" style="margin-top:6px"><span>Novelty Distance</span><span>${(n.novel !== undefined ? n.novel : 0.12).toFixed(3)}</span></div>
+        <div class="row"><span>Malware Probability</span><span>${probVal === null ? "—" : (probVal * 100).toFixed(1) + "%"}</span></div>
+        <div class="risk"><i style="width:${Math.max(0, Math.min(100, (probVal || 0) * 100))}%;background:${n.state==='threat'?'#b42318':n.state==='suspicious'?'#a15c00':'#237a4b'}"></i></div>
+        <div class="row" style="margin-top:6px"><span>Novelty Distance</span><span>${fmtNum(n.novel, 3)}</span></div>
         <div class="row"><span>SHA-256</span><span style="font-family:monospace;font-size:9.5px">${(n.sha256 || "N/A").slice(0, 16)}...</span></div>
         <div class="row"><span>Static Evidence</span><span style="font-size:10px">${evidenceList}</span></div>
         <div style="margin-top:14px;display:flex;gap:6px">
@@ -1650,7 +1629,74 @@ window.addEventListener("DOMContentLoaded", () => {
   drawFlow(document.getElementById("miniFlow"));
   loadThreatNetworkData();
   loadFamilies();
+  loadSystemStatus();
+  loadTimeline();
+  loadAblation();
 });
+
+function loadSystemStatus() {
+  fetch("/api/status").then(r => r.json()).then(st => {
+    window.CURRENT_EMBEDDING_DIM = st.embedding_dim;
+    window.CURRENT_TEMPERATURE = st.temperature;
+    setTxt("statNeuralArch", st.architecture || "—");
+    setTxt("cardModelKind", st.model_loaded ? (st.model_kind || "Neural") : "Not loaded");
+    setTxt("chipResBlocks", (typeof st.residual_blocks === "number") ? `${st.residual_blocks} residual block${st.residual_blocks === 1 ? "" : "s"}` : "—");
+    setTxt("chipEmbDim", st.embedding_dim ? `${st.embedding_dim}-D L2 Hypersphere` : "—");
+    setTxt("chipTemp", (typeof st.temperature === "number") ? `Temperature T = ${st.temperature.toFixed(3)} · P(Malware)` : "—");
+    setTxt("chipTau", (typeof st.novelty_threshold === "number") ? `Calibrated threshold τ = ${st.novelty_threshold.toFixed(4)} (OOD)` : "—");
+    let ds = st.dataset || {};
+    if (ds.available) {
+      setTxt("cardSamples", ds.samples.toLocaleString());
+      setTxt("cardBenign", ds.benign.toLocaleString());
+      setTxt("cardMal", ds.malicious.toLocaleString());
+      setTxt("cardSamplesSub", `${ds.corrupt_records} corrupt records · ${(ds.total_bytes / 1e9).toFixed(1)} GB · ${(ds.time_span || []).join(" → ")}`);
+      setTxt("cardBenignSub", `${fmtPct(ds.benign / ds.samples, 1)} of local records`);
+      setTxt("cardMalSub", `${fmtPct(ds.malicious / ds.samples, 1)} of local records (dataset labels)`);
+      setTxt("datasetPill", `EMBER2024 · ${ds.samples.toLocaleString()} LOCAL RECORDS · ${ds.verified ? "MANIFEST VERIFIED" : "UNVERIFIED"}`);
+    } else {
+      setTxt("datasetPill", "No dataset manifest");
+      setTxt("cardSamplesSub", ds.reason || "Run the dataset verifier to create a manifest.");
+    }
+  }).catch(() => setTxt("datasetPill", "Status unavailable"));
+}
+
+function loadTimeline() {
+  fetch("/api/timeline").then(r => r.json()).then(tl => {
+    let note = document.getElementById("clSourceNote");
+    let tbody = document.getElementById("clStrategyTbody");
+    let tlEl = document.getElementById("clTimeline");
+    if (!tl.available) {
+      note.textContent = tl.reason || "No continual-learning results.";
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#888">No data</td></tr>`;
+      return;
+    }
+    let badge = tl.kind === "synthetic" ? '<span class="badge warning">SYNTHETIC DATA</span>' : '<span class="badge good">EMBER2024 benchmark</span>';
+    note.innerHTML = `${badge} ${escapeHtml(tl.dataset || "")} · source <code>${escapeHtml(tl.source)}</code>. ${(tl.caveats || []).map(escapeHtml).join(" ")}`;
+    tlEl.innerHTML = (tl.batches || []).map((b, i) =>
+      `${i ? '<div class="line"></div>' : ""}<div class="t${i === 0 ? " active" : ""}">${escapeHtml(b.batch_id)}<div class="metric">${escapeHtml(b.window_start)} → ${escapeHtml(b.window_end)}</div></div>`).join("");
+    let rows = Object.entries(tl.strategies || {});
+    let best = rows.reduce((a, r) => (a === null || (r[1].forgetting_mean ?? 1) < (a[1].forgetting_mean ?? 1)) ? r : a, null);
+    tbody.innerHTML = rows.map(([k, v]) => `<tr${best && best[0] === k ? ' style="font-weight:600"' : ""}>
+        <td>${escapeHtml(v.name || k)}</td><td>${fmtNum(v.forgetting_mean)}</td><td>${fmtNum(v.bwt_mean)}</td>
+        <td>${fmtNum(v.macro_f1_mean)}</td><td>${fmtPct(v.fpr_mean)}</td><td>${fmtNum(v.time_sec_mean, 1)} s</td></tr>`).join("");
+  }).catch(() => {});
+}
+
+function loadAblation() {
+  fetch("/api/embedding-ablation").then(r => r.json()).then(ab => {
+    let res = ab.results || {};
+    let rows = res.summary_table || [];
+    let thead = document.getElementById("ablationThead"), tbody = document.getElementById("ablationTbody");
+    if (!rows.length) { tbody.innerHTML = `<tr><td style="color:#888">${escapeHtml(ab.status || "No ablation results.")}</td></tr>`; return; }
+    let cols = Object.keys(rows[0]);
+    let sel = ab.selection ? ab.selection.selected_best_dimension : null;
+    thead.innerHTML = `<tr style="background:#f4f4f2">${cols.map(c => `<th>${escapeHtml(c)}</th>`).join("")}</tr>`;
+    tbody.innerHTML = rows.map(r => `<tr${r.Dimension === sel ? ' style="background:#eef6ff;font-weight:600"' : ""}>${cols.map(c => `<td>${escapeHtml(r[c])}</td>`).join("")}</tr>`).join("");
+    let md = res.metadata || {};
+    setTxt("ablationSelectedBadge", sel ? `Selected in v0.1: ${sel}-D` : "No selection");
+    setTxt("ablationNote", `${(md.dimensions_evaluated || []).length} dimensions × ${(md.seeds_evaluated || []).length} seeds; train ${md.samples_train}, validation ${md.samples_val}, test ${md.samples_test}, challenge ${md.samples_challenge} samples (legacy 256-D features). Values are mean ± SD across seeds; differences between dimensions are mostly within one SD, so no dimension is a clear optimum.`);
+  }).catch(() => {});
+}
 
 document.querySelectorAll(".networkControls button[data-fsfilter]").forEach(b => {
   b.onclick = () => {
@@ -1672,16 +1718,14 @@ function loadThreatNetworkData() {
   fetch("/api/threat-network")
     .then(r => r.json())
     .then(data => {
-      if (data.fs_items && data.fs_items.length) {
-        if (window.bigWebRenderer) window.bigWebRenderer.updateData(data.fs_items, data.fs_edges);
-        if (window.miniWebRenderer) window.miniWebRenderer.updateData(data.fs_items, data.fs_edges);
-        let root = data.fs_items[0];
-        if (root && root.name) {
-          let descEl = document.getElementById("webTargetDesc");
-          if (descEl) {
-            descEl.innerHTML = `Active Target: <b>${root.name}</b> (${data.fs_items.length} nodes mapped across multi-folder hubs). Highlighted outer halos indicate detected threats and flagged files.`;
-          }
-        }
+      let items = data.fs_items || [], edges = data.fs_edges || [];
+      if (window.bigWebRenderer) window.bigWebRenderer.updateData(items, edges);
+      if (window.miniWebRenderer) window.miniWebRenderer.updateData(items, edges);
+      let descEl = document.getElementById("webTargetDesc");
+      if (descEl) {
+        descEl.innerHTML = items.length
+          ? `Active Target: <b>${escapeHtml(items[0].name)}</b> (${items.length} nodes). Node colour reflects the real scan verdict; folders group files by directory (or by verdict when one directory was scanned).`
+          : escapeHtml(data.reason || "No scan results yet.");
       }
     })
     .catch(() => {});
@@ -2096,7 +2140,7 @@ function setup3DNeuralStudio() {
     embedding: {
       id: 'embedding',
       title: 'L2-NORMALIZED EMBEDDING',
-      subtitle: '128-D · OPTIMAL ABLATION DIMENSION',
+      subtitle: 'L2-NORMALIZED EMBEDDING',
       centerX: 355,
       centerY: -15,
       labelYOffset: -205,
@@ -2110,7 +2154,7 @@ function setup3DNeuralStudio() {
     classifier: {
       id: 'classifier',
       title: 'CALIBRATED CLASSIFIER',
-      subtitle: 'LOGITS → PROBABILITY (T = 0.93)',
+      subtitle: 'LOGITS → PROBABILITY (TEMPERATURE-SCALED)',
       centerX: 565,
       centerY: -95,
       labelYOffset: -130,
@@ -2124,13 +2168,13 @@ function setup3DNeuralStudio() {
     novelty: {
       id: 'novelty',
       title: 'COSINE NOVELTY DETECTOR',
-      subtitle: 'CALIBRATED THRESHOLD τ = 0.3433',
+      subtitle: 'CALIBRATED THRESHOLD τ calibrated',
       centerX: 545,
       centerY: 140,
       labelYOffset: -90,
       steps: [
-        '128-D Cosine Distance to Known Centroids',
-        'Calibrated Threshold Gate (τ = 0.3433)',
+        'Cosine Distance to Known Centroids',
+        'Calibrated Threshold Gate (τ calibrated)',
         'Familiar ←──────→ Novel Spectrum',
         'Out-of-Distribution: NOVEL ≠ MALICIOUS'
       ]
@@ -2301,10 +2345,10 @@ function setup3DNeuralStudio() {
     count: 16, totalUnits: 256, heightSpread: 240, depthSpread: 115, xJitter: 5, baseRadius: 2.75, stageTime: 6.2
   });
 
-  // L2-Normalized Embedding (128-D Optimal)
+  // L2-Normalized Embedding
   const colEmbedding = createColumn({
     colIndex: 10, layerId: 'embedding', layerName: 'L2-Normalized Embedding',
-    subRole: '128-D Unit Hypersphere Representation (‖z‖₂ = 1)', x: 355, yCenter: -15,
+    subRole: 'Unit Hypersphere Representation (‖z‖₂ = 1)', x: 355, yCenter: -15,
     count: 52, totalUnits: 128, heightSpread: 185, depthSpread: 92, xJitter: 10, baseRadius: 2.7, stageTime: 7.2
   });
 
@@ -2324,7 +2368,7 @@ function setup3DNeuralStudio() {
 
   const colClassOut = createColumn({
     colIndex: 13, layerId: 'classifier', layerName: 'Classifier Output',
-    subRole: 'Classification Probability (Softmax T=0.93)', x: 635, yCenter: -95,
+    subRole: 'Classification Probability (Temperature-scaled softmax)', x: 635, yCenter: -95,
     count: 2, totalUnits: 2, heightSpread: 68, depthSpread: 10, xJitter: 0, baseRadius: 5.0, stageTime: 9.5
   });
   colClassOut[0].y = -132;
@@ -2347,7 +2391,7 @@ function setup3DNeuralStudio() {
   });
   const colNoveltyGate = createColumn({
     colIndex: 15, layerId: 'novelty', layerName: 'Cosine Novelty Detector',
-    subRole: 'Cosine Distance Threshold Gate (τ = 0.3433)', x: 590, yCenter: 140,
+    subRole: 'Cosine Distance Threshold Gate (τ calibrated)', x: 590, yCenter: 140,
     count: 3, totalUnits: 3, heightSpread: 44, depthSpread: 16, xJitter: 0, baseRadius: 3.5, stageTime: 9.2
   });
   colNoveltyGate[0].y = 116;
@@ -2358,7 +2402,7 @@ function setup3DNeuralStudio() {
   colNoveltyGate[1].z = 0;
   colNoveltyGate[1].baseRadius = 4.4;
   colNoveltyGate[1].specialType = 'novelty-out';
-  colNoveltyGate[1].subRole = 'Cosine Distance Gate (τ = 0.3433)';
+  colNoveltyGate[1].subRole = 'Cosine Distance Gate (τ calibrated)';
 
   colNoveltyGate[2].y = 164;
   colNoveltyGate[2].z = 8;
@@ -3814,18 +3858,28 @@ function loadFamilies() {
     .then(data => {
       let fams = data.families || [];
       let grid = document.getElementById("familyCardsGrid");
-      if (fams.length) {
-        grid.innerHTML = fams.map(f => `
+      if (!data.available || !fams.length) {
+        grid.innerHTML = `<div class="card"><h3>No family data</h3><p>${escapeHtml(data.reason || "Family summary unavailable.")}</p></div>`;
+        return;
+      }
+      const topTags = (obj) => Object.entries(obj || {}).slice(0, 3).map(([k, v]) => `${escapeHtml(k)} (${v.toLocaleString()})`).join(", ");
+      let header = `<div class="card" style="grid-column:1/-1"><div class="k">SOURCE</div>
+        <p style="margin:6px 0 0">${escapeHtml(data.source || "")}. ${data.distinct_families.toLocaleString()} families with family_confidence ≥ ${data.min_family_confidence};
+        showing top ${fams.length} by sample count. ${(data.totals.malicious_with_family || 0).toLocaleString()} of ${(data.totals.malicious || 0).toLocaleString()} malicious records have a confident family label.
+        Family labels come from the dataset (AV-consensus tagging), not from ThreatWeaver's model.</p></div>`;
+      grid.innerHTML = header + fams.map(f => `
           <div class="card">
-            <div class="k">${f.category}</div>
-            <h3 style="margin-top:6px">${f.name}</h3>
-            <div class="small">${f.threat_type || "Malware Strain"} · Risk: ${(f.risk * 100).toFixed(0)}%</div>
-            <p style="margin-top:8px">${f.description.slice(0, 110)}...</p>
-            <div class="small" style="color:#555"><b>APIs:</b> ${(f.dominant_apis || []).slice(0, 3).join(", ")}</div>
-            <button class="btn" style="margin-top:14px" onclick="switchTab('web')">Inspect in Threat Web</button>
+            <div class="k">${escapeHtml(Object.keys(f.file_types || {}).join(" · "))}</div>
+            <h3 style="margin-top:6px">${escapeHtml(f.name)}</h3>
+            <div class="small">${f.sample_count.toLocaleString()} samples · mean label confidence ${(f.mean_family_confidence * 100).toFixed(0)}%</div>
+            <div class="small" style="margin-top:6px">First seen ${f.first_seen || "—"} · Last seen ${f.last_seen || "—"}</div>
+            ${f.tags && f.tags.behavior ? `<div class="small" style="color:#555;margin-top:6px"><b>Behavior tags:</b> ${topTags(f.tags.behavior)}</div>` : ""}
+            ${f.tags && f.tags.packer ? `<div class="small" style="color:#555"><b>Packers:</b> ${topTags(f.tags.packer)}</div>` : ""}
           </div>
         `).join("");
-      }
+    })
+    .catch(() => {
+      document.getElementById("familyCardsGrid").innerHTML = `<div class="card"><h3>Could not load families</h3><p>The /api/families request failed.</p></div>`;
     });
 }
 
@@ -3838,8 +3892,8 @@ function drawFlow(svg) {
     ["PE BINARY", "Static structure"],
     ["FEATURES", "256 dimensions"],
     ["RESMLP ENCODER", "Residual blocks"],
-    ["EMBEDDING", (window.CURRENT_EMBEDDING_DIM ? window.CURRENT_EMBEDDING_DIM + "-D unit sphere" : "128-D unit sphere")],
-    ["CALIBRATED CLASSIFIER", "Temperature T=0.93"],
+    ["EMBEDDING", (window.CURRENT_EMBEDDING_DIM ? window.CURRENT_EMBEDDING_DIM + "-D unit sphere" : "unit sphere")],
+    ["CALIBRATED CLASSIFIER", (window.CURRENT_TEMPERATURE ? "Temperature T=" + window.CURRENT_TEMPERATURE.toFixed(2) : "Temperature-scaled")],
     ["COSINE NOVELTY", "Threshold τ = 0.429"],
     ["SECURITY VERDICT", "NOVEL ≠ MALICIOUS"]
   ];
@@ -3939,7 +3993,7 @@ function purgeHashCache() {
     <!-- Pane A: Fast Online Prototype -->
     <div id="paneOptA">
       <p style="font-size:12px;color:#555;margin:0 0 12px 0">
-        <b>Zero Risk / Instant:</b> Registers this binary's 128-D embedding directly into the Cosine Novelty gate. Future scans of this or structurally similar variants will immediately be recognized as familiar without any weight changes.
+        <b>Zero Risk / Instant:</b> Registers this binary's embedding directly into the Cosine Novelty gate. Future scans of this or structurally similar variants will immediately be recognized as familiar without any weight changes.
       </p>
       <div style="margin-bottom:10px">
         <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Family Name / Cluster Label:</label>
@@ -3952,7 +4006,7 @@ function purgeHashCache() {
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px">
         <button onclick="closeAdaptModal()" class="secondary" style="padding:6px 12px;font-size:12px">Cancel</button>
-        <button onclick="submitOptionA()" class="primary" style="padding:6px 14px;font-size:12px;background:#6c5ce7;border-color:#6c5ce7">Register 128-D Prototype</button>
+        <button onclick="submitOptionA()" class="primary" style="padding:6px 14px;font-size:12px;background:#6c5ce7;border-color:#6c5ce7">Register Prototype</button>
       </div>
     </div>
 

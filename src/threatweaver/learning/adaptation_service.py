@@ -127,7 +127,7 @@ class AdaptationService:
         file_path: str | Path,
         label: int,
         family_name: str,
-        persist: bool = True,
+        persist: bool = False,
     ) -> Dict[str, Any]:
         """Registers a sample's 128-D embedding directly into the novelty detector.
         
@@ -215,7 +215,7 @@ class AdaptationService:
         epochs: int = 5,
         lr: float = 0.0003,
         replay_count: int = 30,
-        persist: bool = True,
+        persist: bool = False,
     ) -> Dict[str, Any]:
         """Performs a continual replay fine-tuning pass over queued samples + historical exemplars."""
         with self._lock:
@@ -344,8 +344,8 @@ class AdaptationService:
 
             # 7. Persist updated model weights and prototypes to checkpoint
             saved_checkpoint = None
-            if persist and self.engine.checkpoint_path:
-                saved_checkpoint = str(self.engine.save_state(self.engine.checkpoint_path))
+            if persist:
+                saved_checkpoint = str(self.engine.save_state(reason=f"continual adaptation on {len(new_y)} queued samples"))
 
             # Mark processed items in queue
             self.queue.mark_adapted([it.id for it in valid_items])
