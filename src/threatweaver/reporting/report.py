@@ -270,8 +270,9 @@ class ScanHistoryManager:
     def search_results(self, verdicts: Optional[List[str]] = None, text: Optional[str] = None,
                        limit: int = 200) -> List[Dict[str, Any]]:
         """Detections across all scans, newest first (for the Detections view)."""
-        sql = ("SELECT r.scan_id, s.timestamp, r.file_path, r.file_name, r.sha256, r.verdict, r.malware_probability "
-               "FROM results r JOIN scans s USING (scan_id) WHERE 1=1")
+        sql = ("SELECT r.scan_id, s.timestamp, r.file_path, r.file_name, r.sha256, r.verdict, r.malware_probability, "
+               "r.file_size_bytes, r.novelty_score, r.is_novel, r.evidence, r.scan_duration_ms, r.model_version, "
+               "r.warning_message FROM results r JOIN scans s USING (scan_id) WHERE 1=1")
         args: List[Any] = []
         if verdicts:
             sql += f" AND r.verdict IN ({','.join('?' * len(verdicts))})"
@@ -281,6 +282,15 @@ class ScanHistoryManager:
             args += [f"%{text}%", f"{text.lower()}%"]
         sql += " ORDER BY s.created DESC, r.idx LIMIT ?"
         args.append(int(limit))
-        keys = ("scan_id", "timestamp", "file_path", "file_name", "sha256", "verdict", "malware_probability")
+        keys = ("scan_id", "timestamp", "file_path", "file_name", "sha256", "verdict", "malware_probability",
+                "file_size_bytes", "novelty_score", "is_novel", "evidence_points", "scan_duration_ms", "model_version",
+                "warning_message")
         with self._connect() as c:
-            return [dict(zip(keys, row)) for row in c.execute(sql, args).fetchall()]
+            out = []
+            for row in c.execute(sql, args).fetchall():
+                d = dict(zip(keys, row))
+                d["is_novel"] = bool(d["is_novel"])
+                d["evidence_points"] = json.loads(d["evidence_points"] or "[]")
+                d["model_version"] = d["model_version"] or ""
+                out.append(d)
+            return out

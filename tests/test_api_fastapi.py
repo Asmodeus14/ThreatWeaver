@@ -87,3 +87,29 @@ def test_openapi_contract_lists_v1_paths(client):
     for p in ("/api/scan", "/api/scan/events", "/api/quarantine", "/api/restore", "/api/families", "/api/status"):
         assert p in spec["paths"], p
     assert "file_path" in spec["components"]["schemas"]["QuarantineRequest"]["properties"]
+
+
+def test_eval_and_detections_endpoints(client):
+    evals = client.get("/api/eval", headers=AUTH).json()["evals"]
+    ids = {e["id"] for e in evals}
+    assert "legacy-v0.1-128d" in ids and "lgbm-v3-dotnet" in ids
+    d = client.get("/api/eval/detail?id=lgbm-v3-dotnet", headers=AUTH).json()
+    assert d["schema"] == "eval/1" and "roc_curve" in d["splits"]["test"] and "Valid" in d["_signature"]
+    assert client.get("/api/eval/detail?id=nope", headers=AUTH).status_code == 404
+    assert "results" in client.get("/api/detections?verdict=Suspicious&q=x", headers=AUTH).json()
+
+
+def test_new_ui_served_with_token_and_legacy_kept(client):
+    from pathlib import Path as _P
+    built = (_P(__file__).resolve().parent.parent / "src/threatweaver/app/static/v2/index.html").is_file()
+    root = client.get("/")
+    assert root.status_code == 200 and TOKEN in root.text
+    if built:
+        assert '<div id="root"></div>' in root.text
+    legacy = client.get("/legacy")
+    assert legacy.status_code == 200 and "apple-pill-tab" in legacy.text and TOKEN in legacy.text
+
+
+def test_asset_route_blocks_traversal(client):
+    for bad in ("../index.html", "..%2F..%2Fapi.py", "%2e%2e%2fapi.py"):
+        assert client.get(f"/v2/assets/{bad}").status_code == 404

@@ -211,7 +211,7 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
             return
         query = urllib.parse.parse_qs(parsed.query)
 
-        if path in ("/", "/index.html"):
+        if path in ("/", "/index.html", "/legacy"):
             self._serve_html_ui()
         elif path == "/api/status":
             self._serve_json(self._get_system_status())
@@ -259,6 +259,18 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                 "pending_count": len(self.adaptation_svc.queue.get_pending()),
                 "last_report": self.adaptation_svc.last_adaptation_report,
             })
+        elif path == "/api/eval":
+            self._serve_json(self._list_evals())
+        elif path == "/api/eval/detail":
+            self._serve_json(*self._eval_detail(query.get("id", [""])[0]))
+        elif path == "/api/detections":
+            verdicts = [v for v in query.get("verdict", []) if v]
+            text = (query.get("q", [""])[0] or "").strip()[:200] or None
+            try:
+                limit = max(1, min(1000, int(query.get("limit", ["200"])[0])))
+            except ValueError:
+                limit = 200
+            self._serve_json({"results": ScanHistoryManager().search_results(verdicts or None, text, limit)})
         elif path == "/api/sample-details":
             sha = query.get("sha256", [""])[0] or query.get("id", [""])[0]
             self._serve_json(self._get_sample_details(sha))
@@ -498,6 +510,7 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
             "model_loaded": self.engine.checkpoint_loaded,
             "checkpoint_path": str(self.engine.checkpoint_path) if self.engine.checkpoint_path else None,
             "dataset": self._get_dataset_manifest_summary(),
+            "detector": self._detector_info(),
             "device": str(self.engine.device),
             "novelty_threshold": self.engine.novelty_detector.threshold if self.engine.novelty_detector else None,
             "quarantine_count": len(self.quarantine_mgr.list_quarantined_files()),
@@ -507,6 +520,50 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
             "protection_mode": "On-Demand Only",
             "protection_note": "Research prototype — Background real-time protection is inactive.",
         }
+
+    def _detector_info(self) -> Dict[str, Any]:
+        """The active detector and its real operating thresholds (drawn on the UI's verdict scale)."""
+        bundle = getattr(self.engine, "bundle", None)
+        if bundle is not None:
+            return {"kind": "lightgbm", "id": bundle.id, "tau_low": bundle.tau_low, "tau_high": bundle.tau_high,
+                    "rules_active": bool(getattr(self.engine, "known_bad", None) and self.engine.known_bad.active)}
+        if self.engine.checkpoint_loaded:
+            t = float(self.engine.threshold)
+            return {"kind": "legacy", "id": self.engine.model_version, "tau_low": t, "tau_high": t, "rules_active": False}
+        return {"kind": "none", "id": "none", "tau_low": 0.5, "tau_high": 0.5, "rules_active": False}
+
+    def _eval_files(self) -> Dict[str, Path]:
+        root = resource_path("artifacts")
+        files = sorted(root.glob("eval/*/eval.json")) + sorted(root.glob("models/*/eval.json"))
+        return {f.parent.name: f for f in files}
+
+    def _list_evals(self) -> Dict[str, Any]:
+        """Evaluation artifacts (eval/1) available to chart; summaries only."""
+        from threatweaver.models import signing
+        out = []
+        for eid, f in self._eval_files().items():
+            try:
+                d = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            test = (d.get("splits") or {}).get("test") or {}
+            out.append({
+                "id": eid, "kind": d.get("kind"), "created_utc": d.get("created_utc"),
+                "model": (d.get("model") or {}).get("id") or eid,
+                "file_types": (d.get("dataset") or {}).get("file_types"),
+                "test_roc_auc": test.get("roc_auc"), "test_tpr_at_fpr": test.get("tpr_at_fpr_curve"),
+                "n_test": test.get("n"), "signature": signing.verify_file(f).reason,
+            })
+        return {"evals": out}
+
+    def _eval_detail(self, eid: str):
+        f = self._eval_files().get(eid)
+        if f is None:
+            return {"error": f"No evaluation named '{eid}'."}, HTTPStatus.NOT_FOUND
+        from threatweaver.models import signing
+        d = json.loads(f.read_text(encoding="utf-8"))
+        d["_signature"] = signing.verify_file(f).reason
+        return d, HTTPStatus.OK
 
     def _get_dataset_manifest_summary(self) -> Dict[str, Any]:
         """Reads the dataset manifest written by the EMBER2024 verifier (no hardcoded counts)."""

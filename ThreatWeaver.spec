@@ -9,6 +9,8 @@ datas = [
     ('artifacts/checkpoints/*', 'artifacts/checkpoints'),
     ('samples/*', 'samples'),
     ('src/threatweaver/models/trusted_keys/*.pub', 'threatweaver/models/trusted_keys'),
+    ('src/threatweaver/app/static/v2/index.html', 'threatweaver/app/static/v2'),
+    ('src/threatweaver/app/static/v2/assets/*', 'threatweaver/app/static/v2/assets'),
 ]
 
 hiddenimports = [

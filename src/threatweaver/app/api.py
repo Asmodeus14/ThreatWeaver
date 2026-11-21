@@ -11,6 +11,7 @@ security guard (Host / Origin / token / JSON-only / size limit) as middleware.
 
 import json
 import urllib.parse
+from pathlib import Path
 from http import HTTPStatus
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -120,6 +121,9 @@ GET_PATHS: List[Tuple[str, str]] = [
     ("/api/learning/prototypes", "Registered novelty prototypes"),
     ("/api/learning/queue", "Adaptation queue"),
     ("/api/sample-details", "Stored result and attribution for one file (?sha256=)"),
+    ("/api/eval", "Evaluation artifacts (eval/1) available for charts"),
+    ("/api/eval/detail", "One evaluation artifact (?id=)"),
+    ("/api/detections", "Results across all scans (?verdict=&q=&limit=)"),
 ]
 
 
@@ -135,7 +139,8 @@ def create_app(api_token: str, allowed_hosts: set) -> FastAPI:
             status, reason = verdict
             return JSONResponse({"error": reason}, status_code=status, headers={"Cache-Control": "no-store"})
         response = await call_next(request)
-        response.headers["Cache-Control"] = "no-store"
+        if not request.url.path.startswith("/v2/assets/"):
+            response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
 
@@ -143,12 +148,42 @@ def create_app(api_token: str, allowed_hosts: set) -> FastAPI:
         status, payload = result
         return JSONResponse(payload, status_code=status)
 
+    page_headers = {"X-Frame-Options": "DENY", "Content-Security-Policy": "frame-ancestors 'none'",
+                    "Referrer-Policy": "no-referrer"}
+    v2_dir = Path(__file__).resolve().parent / "static" / "v2"
+
+    def legacy_page() -> HTMLResponse:
+        from threatweaver.app.ui_html import get_apple_minimalist_html
+        return HTMLResponse(get_apple_minimalist_html().replace("__TW_API_TOKEN__", api_token, 1), headers=page_headers)
+
+    def v2_page() -> HTMLResponse:
+        index = v2_dir / "index.html"
+        if not index.is_file():  # frontend not built: keep the app usable
+            return legacy_page()
+        return HTMLResponse(index.read_text(encoding="utf-8").replace("__TW_API_TOKEN__", api_token, 1), headers=page_headers)
+
     @app.get("/", include_in_schema=False)
     def index() -> HTMLResponse:
-        from threatweaver.app.ui_html import get_apple_minimalist_html
-        html = get_apple_minimalist_html().replace("__TW_API_TOKEN__", api_token, 1)
-        return HTMLResponse(html, headers={"X-Frame-Options": "DENY", "Content-Security-Policy": "frame-ancestors 'none'",
-                                           "Referrer-Policy": "no-referrer"})
+        return v2_page()
+
+    @app.get("/v2/", include_in_schema=False)
+    def index_v2() -> HTMLResponse:
+        return v2_page()
+
+    @app.get("/legacy", include_in_schema=False)
+    def index_legacy() -> HTMLResponse:
+        return legacy_page()
+
+    @app.get("/v2/assets/{name}", include_in_schema=False)
+    def asset(name: str) -> Response:
+        # Serve only files that exist directly in the built assets folder (no path traversal).
+        assets = (v2_dir / "assets").resolve()
+        target = (assets / name).resolve()
+        if target.parent != assets or not target.is_file():
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        media = {".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2", ".woff": "font/woff",
+                 ".svg": "image/svg+xml"}.get(target.suffix, "application/octet-stream")
+        return Response(target.read_bytes(), media_type=media, headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
     for path, summary in GET_PATHS:
         def make(p=path):

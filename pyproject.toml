@@ -57,7 +57,7 @@ threatweaver = "threatweaver.app.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-threatweaver = ["models/trusted_keys/*.pub"]
+threatweaver = ["models/trusted_keys/*.pub", "app/static/v2/*.html", "app/static/v2/assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
