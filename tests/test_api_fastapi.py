@@ -113,3 +113,20 @@ def test_new_ui_served_with_token_and_legacy_kept(client):
 def test_asset_route_blocks_traversal(client):
     for bad in ("../index.html", "..%2F..%2Fapi.py", "%2e%2e%2fapi.py"):
         assert client.get(f"/v2/assets/{bad}").status_code == 404
+
+
+def test_watch_endpoint_lifecycle(client, tmp_path):
+    from tests.fixtures import create_minimal_pe
+    assert client.get("/api/watch", headers=AUTH).json()["running"] is False
+    r = client.post("/api/watch", json={"action": "start", "path": str(tmp_path)}, headers=AUTH).json()
+    assert r["running"] and r["folder"] == str(tmp_path.resolve())
+    time.sleep(1.0)
+    create_minimal_pe(tmp_path / "new_drop.exe")
+    for _ in range(60):
+        st = client.get("/api/watch", headers=AUTH).json()
+        if st.get("scanned", 0) >= 1:
+            break
+        time.sleep(0.25)
+    assert st["scanned"] >= 1 and st["recent"][0]["file_name"] == "new_drop.exe"
+    assert client.post("/api/watch", json={"action": "stop"}, headers=AUTH).json()["running"] is False
+    assert client.post("/api/watch", json={"action": "start", "path": str(tmp_path / "missing")}, headers=AUTH).status_code == 400

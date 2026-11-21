@@ -259,6 +259,8 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                 "pending_count": len(self.adaptation_svc.queue.get_pending()),
                 "last_report": self.adaptation_svc.last_adaptation_report,
             })
+        elif path == "/api/watch":
+            self._serve_json(self._watch_status())
         elif path == "/api/eval":
             self._serve_json(self._list_evals())
         elif path == "/api/eval/detail":
@@ -397,6 +399,25 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._serve_json({"error": str(e)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
+        elif path == "/api/watch":
+            action = str(body.get("action", ""))
+            if action == "start":
+                folder = security.validate_user_path(body.get("path"), must_exist=True)
+                if not folder.is_dir():
+                    self._serve_json({"error": "Choose a folder to watch."}, status=HTTPStatus.BAD_REQUEST)
+                    return
+                self._watch_stop()
+                from threatweaver.scanner.watcher import RealtimeFileWatcher
+                w = RealtimeFileWatcher(watch_directory=folder, inference_engine=self.engine)
+                w.start()
+                ThreatWeaverRequestHandler.watcher = w
+            elif action == "stop":
+                self._watch_stop()
+            else:
+                self._serve_json({"error": "action must be 'start' or 'stop'"}, status=HTTPStatus.BAD_REQUEST)
+                return
+            self._serve_json(self._watch_status())
+
         elif path == "/api/settings":
             thresh = body.get("novelty_threshold")
             if thresh is not None and self.engine.novelty_detector:
@@ -519,6 +540,25 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
             "unfamiliar_count": unfamiliar_count,
             "protection_mode": "On-Demand Only",
             "protection_note": "Research prototype — Background real-time protection is inactive.",
+        }
+
+    watcher = None  # observational folder watcher (one at a time)
+
+    def _watch_stop(self) -> None:
+        w = ThreatWeaverRequestHandler.watcher
+        if w is not None:
+            w.stop()
+            ThreatWeaverRequestHandler.watcher = None
+
+    def _watch_status(self) -> Dict[str, Any]:
+        w = ThreatWeaverRequestHandler.watcher
+        if w is None or not w.is_running():
+            return {"running": False, "mode": "stopped"}
+        return {
+            "running": True, "mode": w.mode, "folder": str(w.watch_dir),
+            "events": w.total_events_detected, "scanned": w.total_events_scanned,
+            "duplicates_dropped": w.total_duplicates_dropped,
+            "recent": [ScanStateManager._serialize(r) for r in list(w.last_results)[-25:]][::-1],
         }
 
     def _detector_info(self) -> Dict[str, Any]:

@@ -19,6 +19,7 @@ from typing import Callable, Dict, Optional, Set
 from threatweaver.scanner.inference import InferenceEngine, ScanResult, ScanVerdict
 from threatweaver.scanner.scan_service import PE_EXTENSIONS
 
+ALERT_VERDICTS = (ScanVerdict.KNOWN_MALICIOUS, ScanVerdict.LIKELY_MALICIOUS, ScanVerdict.SUSPICIOUS, ScanVerdict.UNFAMILIAR)
 DEDUPLICATION_WINDOW_SEC = 2.0  # Time window to suppress duplicate change events
 MAX_EVENT_QUEUE_SIZE = 1000
 
@@ -60,6 +61,8 @@ class RealtimeFileWatcher:
         self.total_events_scanned = 0
         self.total_duplicates_dropped = 0
         self.queue_overflow_drops = 0
+        self.mode = "stopped"
+        self.last_results: list = []
 
     def start(self) -> None:
         """Starts background monitoring and analysis threads."""
@@ -122,9 +125,46 @@ class RealtimeFileWatcher:
             return False
 
     def _monitor_loop(self) -> None:
-        """Polling monitor loop scanning directory state for new/modified PE files."""
-        known_mtimes: Dict[str, float] = {}
+        """Change-event monitor (ReadDirectoryChangesW via watchdog); polling fallback."""
+        try:
+            from watchdog.events import FileSystemEventHandler
+            from watchdog.observers import Observer
+        except ImportError:
+            self._poll_loop()
+            return
 
+        watcher = self
+
+        class _Handler(FileSystemEventHandler):
+            def on_created(self, event):
+                if not event.is_directory:
+                    watcher.enqueue_file_event(Path(event.src_path))
+
+            def on_modified(self, event):
+                if not event.is_directory:
+                    watcher.enqueue_file_event(Path(event.src_path))
+
+            def on_moved(self, event):
+                if not event.is_directory:
+                    watcher.enqueue_file_event(Path(event.dest_path))
+
+        self.mode = "events"
+        observer = Observer()
+        observer.schedule(_Handler(), str(self.watch_dir), recursive=True)
+        observer.start()
+        try:
+            while not self._stop_event.wait(0.5):
+                if not observer.is_alive():
+                    break
+        finally:
+            observer.stop()
+            observer.join(timeout=2.0)
+
+    def _poll_loop(self) -> None:
+        """Fallback: periodic directory walk. Files present at start are baseline, not events."""
+        self.mode = "polling"
+        known_mtimes: Dict[str, float] = {}
+        first_pass = True
         while not self._stop_event.is_set():
             try:
                 if self.watch_dir.is_dir():
@@ -133,19 +173,40 @@ class RealtimeFileWatcher:
                             break
                         for f in files:
                             p = Path(root) / f
-                            if p.suffix.lower() in PE_EXTENSIONS:
-                                try:
-                                    mtime = p.stat().st_mtime
-                                    p_str = str(p)
-                                    if p_str not in known_mtimes or known_mtimes[p_str] != mtime:
-                                        known_mtimes[p_str] = mtime
-                                        self.enqueue_file_event(p)
-                                except Exception:
-                                    pass
-            except Exception:
+                            if p.suffix.lower() not in PE_EXTENSIONS:
+                                continue
+                            try:
+                                mtime = p.stat().st_mtime
+                            except OSError:
+                                continue
+                            key = str(p)
+                            if known_mtimes.get(key) != mtime:
+                                known_mtimes[key] = mtime
+                                if not first_pass:
+                                    self.enqueue_file_event(p)
+            except OSError:
                 pass
-
+            first_pass = False
             self._stop_event.wait(self.poll_interval)
+
+    @staticmethod
+    def _wait_until_stable(path: Path, settle_sec: float = 0.5, max_wait_sec: float = 10.0) -> bool:
+        """Waits until a file stops growing (avoids scanning half-written downloads)."""
+        deadline = time.time() + max_wait_sec
+        try:
+            last = path.stat().st_size
+        except OSError:
+            return False
+        while time.time() < deadline:
+            time.sleep(settle_sec)
+            try:
+                size = path.stat().st_size
+            except OSError:
+                return False
+            if size == last:
+                return True
+            last = size
+        return True
 
     def _processing_loop(self) -> None:
         """Processes enqueued change events through static inference engine."""
@@ -157,11 +218,13 @@ class RealtimeFileWatcher:
 
             try:
                 # Analyze file statically without blocking file access
-                if event.file_path.is_file():
+                if event.file_path.is_file() and self._wait_until_stable(event.file_path):
                     res = self.engine.analyze_file(event.file_path)
                     self.total_events_scanned += 1
-                    # In observational mode, notify if suspicious or unfamiliar
-                    if res.verdict in (ScanVerdict.SUSPICIOUS, ScanVerdict.UNFAMILIAR):
+                    self.last_results.append(res)
+                    del self.last_results[:-200]
+                    # Observational mode: notify; never block, delete or quarantine automatically.
+                    if res.verdict in ALERT_VERDICTS:
                         if self.on_alert:
                             self.on_alert(res)
             except Exception:

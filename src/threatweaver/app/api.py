@@ -98,6 +98,11 @@ class AdaptRequest(_Loose):
     persist: bool = False
 
 
+class WatchRequest(_Loose):
+    action: str = Field(..., description='"start" or "stop"')
+    path: Optional[str] = Field(None, description="Folder to watch (start only)")
+
+
 class SettingsRequest(_Loose):
     novelty_threshold: Optional[float] = None
     max_workers: Optional[int] = None
@@ -124,6 +129,7 @@ GET_PATHS: List[Tuple[str, str]] = [
     ("/api/eval", "Evaluation artifacts (eval/1) available for charts"),
     ("/api/eval/detail", "One evaluation artifact (?id=)"),
     ("/api/detections", "Results across all scans (?verdict=&q=&limit=)"),
+    ("/api/watch", "Observational folder watcher status and recent results"),
 ]
 
 
@@ -204,6 +210,7 @@ def create_app(api_token: str, allowed_hosts: set) -> FastAPI:
     post("/api/learning/queue", QueueRequest, "Queue a file for gated adaptation")
     post("/api/learning/adapt", AdaptRequest, "Run continual adaptation")
     post("/api/settings", SettingsRequest, "Change detection settings")
+    post("/api/watch", WatchRequest, "Start or stop the observational folder watcher")
 
     @app.post("/api/scan/cancel", summary="Cancel the running scan")
     def cancel():

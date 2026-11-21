@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api } from "../lib/api";
+import { api, ScanResultDto } from "../lib/api";
+import { Verdict } from "../components/Verdict";
 import { useStatus } from "../lib/detector";
 import { useToast } from "../components/Toast";
 
@@ -68,6 +69,8 @@ export function Settings() {
         </label>
       </section>
 
+      <WatchPanel />
+
       <section className="panel panel-pad section">
         <h2>Performance</h2>
         <label className="row">
@@ -104,5 +107,81 @@ export function Settings() {
         </dl>
       </section>
     </>
+  );
+}
+
+interface WatchStatus {
+  running: boolean;
+  mode: string;
+  folder?: string;
+  events?: number;
+  scanned?: number;
+  recent?: ScanResultDto[];
+}
+
+/** Observational folder watcher: scans new or changed executables; never blocks or deletes. */
+function WatchPanel() {
+  const toast = useToast();
+  const [st, setSt] = useState<WatchStatus | null>(null);
+  const [folder, setFolder] = useState("");
+  useEffect(() => {
+    let alive = true;
+    const load = () => api.get<WatchStatus>("/api/watch").then((r) => alive && setSt(r)).catch(() => {});
+    load();
+    const t = window.setInterval(load, 3000);
+    return () => {
+      alive = false;
+      window.clearInterval(t);
+    };
+  }, []);
+  async function act(action: "start" | "stop") {
+    try {
+      setSt(await api.post<WatchStatus>("/api/watch", action === "start" ? { action, path: folder } : { action }));
+      toast(action === "start" ? "Watching folder." : "Stopped watching.");
+    } catch (e) {
+      toast((e as Error).message, true);
+    }
+  }
+  return (
+    <section className="panel panel-pad section">
+      <h2>Watch a folder</h2>
+      <p className="muted small">
+        Scans executables as they appear or change, for example in Downloads. Observation only: files are never blocked, moved or deleted
+        automatically. This is not real-time protection.
+      </p>
+      {st?.running ? (
+        <>
+          <div className="row small">
+            <span>
+              Watching <span className="mono">{st.folder}</span> ({st.mode === "events" ? "file-system events" : "polling"}); {st.scanned} scanned
+            </span>
+            <button onClick={() => act("stop")}>Stop watching</button>
+          </div>
+          {st.recent && st.recent.length > 0 && (
+            <ul className="evidence">
+              {st.recent.slice(0, 8).map((r, i) => (
+                <li key={r.sha256 + i} className="row" style={{ justifyContent: "space-between" }}>
+                  <span>{r.file_name}</span>
+                  <Verdict verdict={r.verdict} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : (
+        <form
+          className="row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            act("start");
+          }}
+        >
+          <input type="text" value={folder} onChange={(e) => setFolder(e.target.value)} placeholder="C:\Users\you\Downloads" aria-label="Folder to watch" style={{ flex: 1, minWidth: 260 }} />
+          <button type="submit" disabled={!folder.trim()}>
+            Start watching
+          </button>
+        </form>
+      )}
+    </section>
   );
 }
