@@ -48,6 +48,7 @@ class ScanStateManager:
         self.last_report: Optional[ScanReport] = None
         self._scan_thread: Optional[threading.Thread] = None
         self.target_path: str = ""
+        self.scan_seq: int = 0
         self.is_full_system: bool = False
 
     def start_scan(self, target_path: str, only_pe_extensions: bool = True) -> bool:
@@ -63,6 +64,7 @@ class ScanStateManager:
             self.current_file = ""
             self.results = []
             self.last_report = None
+            self.scan_seq += 1
 
         def worker():
             def on_prog(cur: int, tot: int, fn: str):
@@ -98,6 +100,43 @@ class ScanStateManager:
         self.service.cancel()
         with self.lock:
             self.is_scanning = False
+
+    def get_events(self, since: int, seq: Optional[int], max_items: int = 250) -> Dict[str, Any]:
+        """Incremental progress: only results the client has not seen yet (cursor = index).
+
+        Replaces re-sending up to 500 results on every poll. If the client's `seq` refers to an
+        older scan, the cursor resets to 0.
+        """
+        with self.lock:
+            if seq != self.scan_seq:
+                since = 0
+            since = max(0, min(int(since), len(self.results)))
+            chunk = self.results[since:since + max_items]
+            return {
+                "scan_seq": self.scan_seq,
+                "is_scanning": self.is_scanning,
+                "completed": self.completed_count,
+                "total": self.total_count,
+                "current_file": self.current_file,
+                "is_full_system": self.is_full_system,
+                "target_path": self.target_path,
+                "results_count": len(self.results),
+                "next": since + len(chunk),
+                "new_results": [self._serialize(r) for r in chunk],
+            }
+
+    @staticmethod
+    def _serialize(r: ScanResult) -> Dict[str, Any]:
+        mv = r.model_version
+        triage = "Cache" if "Cached" in mv else ("Authenticode" if "Authenticode" in mv else ("LightGBM" if "LightGBM" in mv else "Neural"))
+        return {
+            "file_path": r.file_path, "file_name": r.file_name, "file_size_bytes": r.file_size_bytes,
+            "sha256": r.sha256, "verdict": r.verdict.value, "malware_probability": round(r.malware_probability, 4),
+            "novelty_score": round(r.novelty_score, 4), "is_novel": r.is_novel, "evidence_points": r.evidence_points,
+            "scan_duration_ms": round(r.scan_duration_ms, 2), "model_version": r.model_version, "triage_stage": triage,
+            "nearest_known_cluster": r.nearest_known_cluster, "warning_message": r.warning_message,
+            "explanation": r.explanation,
+        }
 
     def get_status(self) -> Dict[str, Any]:
         with self.lock:
@@ -180,6 +219,15 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
             self._serve_json(self._get_browse_paths())
         elif path == "/api/scan/progress":
             self._serve_json(self.state_mgr.get_status())
+        elif path == "/api/scan/events":
+            try:
+                since = int(query.get("since", ["0"])[0])
+                seq_raw = query.get("seq", [""])[0]
+                seq = int(seq_raw) if seq_raw else None
+            except ValueError:
+                self._serve_json({"error": "since and seq must be integers"}, status=HTTPStatus.BAD_REQUEST)
+                return
+            self._serve_json(self.state_mgr.get_events(since, seq))
         elif path == "/api/history":
             history = ScanHistoryManager().load_history()
             self._serve_json({"history": history})

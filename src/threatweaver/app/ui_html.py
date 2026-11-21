@@ -1891,6 +1891,7 @@ function startScanRequest(targetPath, onlyPe, scanMode) {
       return;
     }
     activeScanResults = [];
+    scanCursor = 0; scanSeq = null;
     clearInterval(scanInterval);
     scanInterval = setInterval(pollScanProgress, 350);
   })
@@ -3709,61 +3710,54 @@ function traceFileByIndex(idx) {
   }
 }
 
+let scanCursor = 0, scanSeq = null;
+const MAX_RENDERED_RESULTS = 500;
+
 function pollScanProgress() {
-  fetch("/api/scan/progress")
+  fetch(`/api/scan/events?since=${scanCursor}&seq=${scanSeq === null ? "" : scanSeq}`)
     .then(r => r.json())
     .then(st => {
-      // 1. Progress bar
+      // New scan (or first poll): start a fresh result list
+      if (st.scan_seq !== scanSeq) { scanSeq = st.scan_seq; activeScanResults = []; }
+      if (st.new_results && st.new_results.length) {
+        activeScanResults = activeScanResults.concat(st.new_results);
+        if (activeScanResults.length > 20000) activeScanResults = activeScanResults.slice(-20000);
+        renderScanResultsTable(activeScanResults.slice(-MAX_RENDERED_RESULTS).reverse());
+        traceFileThroughNeuralPipeline(st.new_results[st.new_results.length - 1], true);
+      } else if (st.current_file) {
+        setTxt("nlFileName", st.current_file.split("/").pop().split("\\").pop());
+      }
+      scanCursor = st.next;
+
+      // Progress bar
       if (st.total > 0) {
         let pct = Math.min(100, Math.round((st.completed / st.total) * 100));
         let bar = document.getElementById("scanProgBar");
         if (bar) bar.style.width = pct + "%";
         setTxt("scanProgPct", pct + "%");
-        if (st.is_full_system) {
-          setTxt("scanStatusText", `System Scan: Discovered ${st.total} PEs | Inspected ${st.completed}: ${st.current_file || ""}`);
-        } else {
-          setTxt("scanStatusText", `Inspected ${st.completed}/${st.total}: ${st.current_file || ""}`);
-        }
+        setTxt("scanStatusText", st.is_full_system
+          ? `System Scan: Discovered ${st.total} PEs | Inspected ${st.completed}: ${st.current_file || ""}`
+          : `Inspected ${st.completed}/${st.total}: ${st.current_file || ""}`);
       } else if (st.is_scanning) {
-        setTxt("scanStatusText", st.is_full_system ? "Traversing fixed volumes & analyzing binaries in real time..." : "Traversing target path...");
+        setTxt("scanStatusText", st.is_full_system ? "Traversing fixed volumes and analyzing binaries..." : "Traversing target path...");
       }
 
-      // 2. Active neural trace
-      if (st.latest_result) {
-        traceFileThroughNeuralPipeline(st.latest_result, true);
-      } else if (st.current_file) {
-        setTxt("nlFileName", st.current_file.split("/").pop().split("\\").pop());
-        setTxt("nlStage", "Extracting 256-D Static Features");
-      }
-
-      // 3. Keep results cached and rendered
-      if (st.results && st.results.length > 0) {
-        activeScanResults = st.results;
-        renderScanResultsTable(st.results);
-      }
-
-      // 4. Completed state
-      if (!st.is_scanning) {
+      // Completed: keep polling until every result has been fetched
+      if (!st.is_scanning && st.next >= st.results_count) {
         clearInterval(scanInterval);
         resetScanButtons();
         let bar = document.getElementById("scanProgBar");
         if (bar) bar.style.width = "100%";
         setTxt("scanProgPct", "100%");
-
-        let totalCount = (st.results_count !== undefined) ? st.results_count : (st.results ? st.results.length : 0);
-        if (totalCount === 0) {
+        if (st.results_count === 0) {
           setTxt("scanStatusText", "Scan complete: 0 PE executable binaries (.exe, .dll, .sys) found in target path.");
           renderScanResultsTable([]);
           setTxt("nlStage", "No PE files found");
         } else {
-          setTxt("scanStatusText", `Scan complete! ${totalCount} binary files analyzed.`);
+          setTxt("scanStatusText", `Scan complete! ${st.results_count} binary files analyzed.` +
+            (st.results_count > MAX_RENDERED_RESULTS ? ` Showing the latest ${MAX_RENDERED_RESULTS}; full results are in Reports.` : ""));
           setTxt("nlStage", "Scan Completed");
-          if (st.results && st.results.length > 0) {
-            renderScanResultsTable(st.results);
-            traceFileThroughNeuralPipeline(st.results[0], false);
-          }
         }
-
         loadThreatNetworkData();
       }
     })

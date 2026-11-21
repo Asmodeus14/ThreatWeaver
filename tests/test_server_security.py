@@ -161,3 +161,27 @@ def test_allowed_hosts_and_origin():
     assert security.check_origin(None, hosts)
     assert security.check_origin("http://127.0.0.1:8765", hosts)
     assert not security.check_origin("null", hosts)
+
+
+def test_scan_events_cursor(server_port, tmp_path):
+    """Incremental progress returns only unseen results; a stale seq resets the cursor."""
+    import time as _t
+    for i in range(3):
+        (tmp_path / f"f{i}.exe").write_bytes(b"MZ" + bytes(300))
+    status, _, data = raw(server_port, "POST", "/api/scan", body=json.dumps({"target_path": str(tmp_path)}),
+                          headers=authed(server_port))
+    assert status == 200
+    for _ in range(100):
+        _, _, d = raw(server_port, "GET", "/api/scan/events?since=0", headers=authed(server_port))
+        ev = json.loads(d)
+        if not ev["is_scanning"] and ev["results_count"] == 3:
+            break
+        _t.sleep(0.1)
+    assert ev["results_count"] == 3 and len(ev["new_results"]) == 3 and ev["next"] == 3
+    seq = ev["scan_seq"]
+    _, _, d = raw(server_port, "GET", f"/api/scan/events?since=3&seq={seq}", headers=authed(server_port))
+    assert json.loads(d)["new_results"] == []
+    _, _, d = raw(server_port, "GET", f"/api/scan/events?since=3&seq={seq - 1}", headers=authed(server_port))
+    assert len(json.loads(d)["new_results"]) == 3          # stale seq -> cursor reset
+    status, _, _ = raw(server_port, "GET", "/api/scan/events?since=abc", headers=authed(server_port))
+    assert status == 400
