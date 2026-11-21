@@ -25,8 +25,7 @@ from typing import TYPE_CHECKING, Optional, Tuple
 if TYPE_CHECKING:
     from threatweaver.scanner.inference import ScanResult
 
-DEFAULT_CACHE_DIR = Path.home() / ".threatweaver" / "cache"
-DEFAULT_DB_PATH = DEFAULT_CACHE_DIR / "clean_hashes.db"
+DEFAULT_DB_NAME = "scan_cache.db"  # under threatweaver.core.paths.cache_dir()
 MAX_MEMORY_CACHE_ENTRIES = 10000
 NON_CACHEABLE_VERDICTS = ("Unsupported Format", "Analysis Error")
 
@@ -52,8 +51,8 @@ class CleanHashCache:
             return
 
         if db_path is None:
-            DEFAULT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            self.db_path = str(DEFAULT_DB_PATH)
+            from threatweaver.core.paths import cache_dir
+            self.db_path = str(cache_dir() / DEFAULT_DB_NAME)
         else:
             p = Path(db_path)
             if str(p) != ":memory:":

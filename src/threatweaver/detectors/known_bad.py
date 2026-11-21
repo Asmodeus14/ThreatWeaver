@@ -27,8 +27,8 @@ def default_rules_dir() -> Path:
     base = os.environ.get("THREATWEAVER_RULES_DIR")
     if base:
         return Path(base)
-    lad = os.environ.get("LOCALAPPDATA")
-    return (Path(lad) / "ThreatWeaver" / "rules") if lad else (Path.home() / ".threatweaver" / "rules")
+    from threatweaver.core.paths import app_data_dir
+    return app_data_dir() / "rules"
 
 
 def _load_hash_files(directory: Path) -> Dict[str, str]:

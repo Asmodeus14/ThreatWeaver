@@ -22,7 +22,9 @@ from threatweaver.scanner.hash_cache import CleanHashCache
 from threatweaver.scanner.signature_verifier import WindowsSignatureVerifier
 
 
-SHIPPED_CHECKPOINT_DIR = Path("artifacts/checkpoints")
+from threatweaver.core.paths import resource_path as _resource_path
+
+SHIPPED_CHECKPOINT_DIR = _resource_path("artifacts/checkpoints")
 VERDICT_POLICY_VERSION = "v0.1-policy-2"  # bump whenever verdict logic changes (invalidates cache)
 
 
@@ -34,7 +36,7 @@ def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
         while chunk := f.read(chunk_size):
             h.update(chunk)
     return h.hexdigest()
-LOCAL_MODELS_DIR = Path("artifacts/models/local")
+LOCAL_MODELS_DIR: Optional[Path] = None  # None -> threatweaver.core.paths.local_models_dir()
 
 
 class ScanVerdict(str, Enum):
@@ -307,10 +309,12 @@ class InferenceEngine:
         else:
             parent_stem = self.checkpoint_path.stem.split("_local_")[0] if self.checkpoint_path else "threatweaver"
             stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
-            dest = (LOCAL_MODELS_DIR / f"{parent_stem}_local_{stamp}.pt").resolve()
+            from threatweaver.core.paths import local_models_dir
+            base_dir = LOCAL_MODELS_DIR or local_models_dir()
+            dest = (base_dir / f"{parent_stem}_local_{stamp}.pt").resolve()
             n = 1
             while dest.exists():
-                dest = (LOCAL_MODELS_DIR / f"{parent_stem}_local_{stamp}_{n}.pt").resolve()
+                dest = (base_dir / f"{parent_stem}_local_{stamp}_{n}.pt").resolve()
                 n += 1
         dest.parent.mkdir(parents=True, exist_ok=True)
         parent_path = str(self.checkpoint_path) if self.checkpoint_path else None

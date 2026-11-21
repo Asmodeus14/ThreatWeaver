@@ -47,8 +47,8 @@ def key_dir() -> Path:
     override = os.environ.get("THREATWEAVER_KEY_DIR")
     if override:
         return Path(override)
-    base = os.environ.get("LOCALAPPDATA")
-    return (Path(base) / "ThreatWeaver" / "keys") if base else (Path.home() / ".threatweaver" / "keys")
+    from threatweaver.core.paths import app_data_dir
+    return app_data_dir() / "keys"
 
 
 def _dpapi(data: bytes, protect: bool) -> bytes:

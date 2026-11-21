@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 
 from threatweaver import __version__
 from threatweaver.app import security
+from threatweaver.core.paths import migrate_legacy_vault, resource_path
 from threatweaver.app.security import PathPolicyError
 from threatweaver.quarantine.manager import QuarantineManager
 from threatweaver.learning.adaptation_service import AdaptationService
@@ -29,7 +30,7 @@ from threatweaver.scanner.inference import InferenceEngine, ScanResult, ScanVerd
 from threatweaver.scanner.scan_service import ScanService
 
 DEFAULT_PORT = 8765
-DEFAULT_CHECKPOINT = Path("artifacts/checkpoints/threatweaver_v1.pt")
+DEFAULT_CHECKPOINT = resource_path("artifacts/checkpoints/threatweaver_v1.pt")
 
 
 class ScanStateManager:
@@ -461,7 +462,7 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
 
     def _get_dataset_manifest_summary(self) -> Dict[str, Any]:
         """Reads the dataset manifest written by the EMBER2024 verifier (no hardcoded counts)."""
-        p = Path("artifacts/dataset/ember2024_manifest.json")
+        p = resource_path("artifacts/dataset/ember2024_manifest.json")
         if not p.is_file():
             return {"available": False, "reason": "No dataset manifest at artifacts/dataset/ember2024_manifest.json"}
         try:
@@ -475,7 +476,7 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
         out["available"] = True
         out["source"] = str(p)
         # EMBER2024 files contain every sample twice; prefer unique-SHA-256 counts when available.
-        fam = Path("artifacts/dataset/family_summary.json")
+        fam = resource_path("artifacts/dataset/family_summary.json")
         if fam.is_file():
             try:
                 totals = json.loads(fam.read_text(encoding="utf-8")).get("totals", {})
@@ -488,8 +489,8 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
         return out
 
     def _serve_embedding_ablation(self) -> None:
-        p_res = Path("artifacts/benchmarks/embedding_dimension_results.json")
-        p_sel = Path("artifacts/benchmarks/selected_embedding_dimension.json")
+        p_res = resource_path("artifacts/benchmarks/embedding_dimension_results.json")
+        p_sel = resource_path("artifacts/benchmarks/selected_embedding_dimension.json")
         data: Dict[str, Any] = {}
         if p_res.is_file():
             try:
@@ -506,8 +507,8 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
         self._serve_json(data if data else {"status": "No embedding dimension ablation report available yet"})
 
     def _serve_research_results(self) -> None:
-        p_bench = Path("artifacts/benchmarks/continual_learning_results.json")
-        p_rep = Path("reports/continual_learning_results.json")
+        p_bench = resource_path("artifacts/benchmarks/continual_learning_results.json")
+        p_rep = resource_path("reports/continual_learning_results.json")
         target = p_bench if p_bench.is_file() else p_rep
         if target.is_file():
             try:
@@ -732,7 +733,7 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
 
     def _get_families_data(self) -> Dict[str, Any]:
         """Serves family statistics counted from local EMBER2024 metadata (tools/build_family_summary.py)."""
-        p = Path("artifacts/dataset/family_summary.json")
+        p = resource_path("artifacts/dataset/family_summary.json")
         if p.is_file():
             try:
                 with open(p, "r", encoding="utf-8") as f:
@@ -752,8 +753,8 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
         tools/run_real_ember_benchmarks.py from 5 consecutive 2-week windows of EMBER2024 Dot_Net_test.
         reports/continual_learning_results.json is produced from SYNTHETIC data and is labelled as such.
         """
-        real_p = Path("artifacts/benchmarks/continual_learning_results.json")
-        synth_p = Path("reports/continual_learning_results.json")
+        real_p = resource_path("artifacts/benchmarks/continual_learning_results.json")
+        synth_p = resource_path("reports/continual_learning_results.json")
 
         if real_p.is_file():
             try:
@@ -774,7 +775,7 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                 for k, v in raw.items() if isinstance(v, dict)
             }
             batches: List[Dict[str, Any]] = []
-            dn_files = sorted(Path("data/ember2024/Dot_Net_test").glob("*.jsonl"))
+            dn_files = sorted(resource_path("data/ember2024/Dot_Net_test").glob("*.jsonl"))
             for b in range(5):
                 pair = dn_files[2 * b: 2 * b + 2]
                 if len(pair) == 2:
@@ -910,6 +911,10 @@ def create_server(
 ) -> tuple[ThreadingHTTPServer, str]:
     """Configures and instantiates the ThreatWeaver HTTP server instance."""
     ckpt = Path(checkpoint_path) if checkpoint_path else DEFAULT_CHECKPOINT
+    try:
+        migrate_legacy_vault()
+    except Exception as e:  # noqa: BLE001 - never block start-up; legacy vault stays intact
+        print(f"[!] Legacy quarantine vault was not migrated: {e}")
     engine = InferenceEngine(checkpoint_path=ckpt if ckpt.is_file() else None, isolate_extraction=True,
                              bundle_path=bundle_path)
     state_mgr = ScanStateManager(inference_engine=engine)

@@ -121,10 +121,13 @@ class QuarantineManager:
 
     def __init__(
         self,
-        quarantine_dir: str | Path = "quarantine_store",
+        quarantine_dir: Optional[str | Path] = None,
         system_root: Optional[str | Path] = None,
         sign_manifest: bool = True,
     ):
+        if quarantine_dir is None:
+            from threatweaver.core.paths import vault_dir
+            quarantine_dir = vault_dir()
         self.quarantine_dir = Path(quarantine_dir).resolve()
         self.quarantine_dir.mkdir(parents=True, exist_ok=True)
         self.manifest_path = self.quarantine_dir / "quarantine.manifest.json"

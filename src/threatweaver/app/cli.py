@@ -510,7 +510,7 @@ def main() -> None:
     p_quar = subparsers.add_parser("quarantine", help="Safely isolate a file to vault")
     p_quar.add_argument("path", help="Path of file to quarantine")
     p_quar.add_argument("--reason", default="Manual isolation", help="Reason for quarantine")
-    p_quar.add_argument("--vault", default="quarantine_store", help="Quarantine directory")
+    p_quar.add_argument("--vault", default=None, help="Quarantine directory (default: %%LOCALAPPDATA%%\\ThreatWeaver\\quarantine)")
     p_quar.add_argument("--dry-run", action="store_true", help="Perform checks without moving file")
     p_quar.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
 
@@ -518,14 +518,14 @@ def main() -> None:
     p_rest = subparsers.add_parser("restore", help="Restore an isolated file from vault")
     p_rest.add_argument("quarantine_id", help="Quarantine record ID to restore")
     p_rest.add_argument("--dest", default=None, help="Optional alternative restore destination")
-    p_rest.add_argument("--vault", default="quarantine_store", help="Quarantine directory")
+    p_rest.add_argument("--vault", default=None, help="Quarantine directory (default: %%LOCALAPPDATA%%\\ThreatWeaver\\quarantine)")
     p_rest.add_argument("--overwrite", action="store_true", help="Overwrite destination if present")
     p_rest.add_argument("--dry-run", action="store_true", help="Perform checks without restoring")
     p_rest.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
 
     # list-quarantine subcommand
     p_lsq = subparsers.add_parser("list-quarantine", help="List all quarantined files")
-    p_lsq.add_argument("--vault", default="quarantine_store", help="Quarantine directory")
+    p_lsq.add_argument("--vault", default=None, help="Quarantine directory (default: %%LOCALAPPDATA%%\\ThreatWeaver\\quarantine)")
 
     # history subcommand
     subparsers.add_parser("history", help="Show past scan sessions")
