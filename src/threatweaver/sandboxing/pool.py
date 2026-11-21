@@ -46,17 +46,22 @@ def _task_ember_v3_vector(path: str):
 
 
 def _task_v3_with_indicators(path: str):
-    """One parse round-trip for the bundle path: EMBER v3 vector + human-readable indicators."""
+    """One parse for the v2 path: thrember raw features -> (EMBER v3 vector, static indicators)."""
+    from threatweaver.detectors.indicators import as_dicts, indicators_from_raw
     from threatweaver.scanner.ember_v3 import get_extractor
-    from threatweaver.scanner.feature_extractor import FeatureExtractor
 
-    legacy = FeatureExtractor().extract_from_file(path)
-    if not legacy.is_valid_pe:
-        return {"is_pe": False, "error": legacy.raw_metadata.get("error"), "indicators": legacy.detected_indicators,
-                "vector": None, "file_size": legacy.file_size}
-    vec = get_extractor().vector_from_file(path)
-    return {"is_pe": True, "error": None, "indicators": legacy.detected_indicators, "vector": vec,
-            "file_size": legacy.file_size}
+    ext = get_extractor()
+    try:
+        bytez = ext.read_bytes(path)
+    except ValueError as e:  # size limit
+        return {"is_pe": False, "error": str(e), "indicators": [], "vector": None}
+    if bytez[:2] != b"MZ":
+        return {"is_pe": False, "error": "missing MZ header", "indicators": [], "vector": None}
+    raw = ext.raw_from_bytes(bytez)
+    if not (raw.get("general") or {}).get("is_pe"):
+        return {"is_pe": False, "error": "PE headers could not be parsed", "indicators": [], "vector": None}
+    return {"is_pe": True, "error": None, "vector": ext.vector_from_raw(raw),
+            "indicators": as_dicts(indicators_from_raw(raw))}
 
 
 def _diag_sleep(seconds: str):

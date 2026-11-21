@@ -214,7 +214,9 @@ class InferenceEngine:
                 evidence.append(f"YARA scan error: {kb.yara_error}")
         if sig is not None:
             evidence.append(f"Authenticode: {'valid' if sig.is_trusted else 'not trusted'} ({sig.provider}; {sig.details})")
-        evidence.extend(f"Static indicator: {i}" for i in parsed.get("indicators", []))
+        sev_rank = {"high": 0, "medium": 1, "low": 2}
+        for i in sorted(parsed.get("indicators", []), key=lambda d: sev_rank.get(d.get("severity"), 3)):
+            evidence.append(f"Static indicator [{i['severity']}]: {i['text']}")
 
         res = ScanResult(
             file_path=str(path),
@@ -228,7 +230,7 @@ class InferenceEngine:
             evidence_points=evidence,
             scan_duration_ms=(time.time() - start_t) * 1000.0,
             model_version=self.model_version,
-            raw_indicators=list(parsed.get("indicators", [])),
+            raw_indicators=[i["id"] for i in parsed.get("indicators", [])],
             nearest_known_cluster=None,
             warning_message=None if p_mal is not None else "No model score; treat as unknown, not benign.",
             explanation=explanation,
