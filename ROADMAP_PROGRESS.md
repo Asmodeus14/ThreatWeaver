@@ -20,7 +20,7 @@ Defaults chosen (change any time): React + TypeScript frontend · signature bypa
 
 ## Phase 2 — Feature & evaluation foundation
 - [x] 2.1 Deterministic legacy features (replace `hash()`)
-- [ ] 2.2 `thrember` integration (EMBER2024 v3, 2,568-D) with parity tests
+- [x] 2.2 `thrember` integration (EMBER2024 v3, 2,568-D) with parity tests
 - [!] 2.3 Dataset pipeline — needs approval for EMBER2024 train-partition download (~75–100 GB)
 - [ ] 2.4 Sandboxed extraction worker pool (timeouts, memory caps)
 - [ ] 2.5 Evaluation harness → `eval.json` single source of truth
@@ -95,3 +95,10 @@ Defaults chosen (change any time): React + TypeScript frontend · signature bypa
   Verified: identical vectors across PYTHONHASHSEED 0/1/12345/987 in separate processes; notepad.exe P(mal) now
   0.078864 on every run (was 0.094 vs 0.092). The shipped model was trained with these dims constant, so it stays valid.
   New `tests/test_feature_determinism.py`. 137 pass, 1 skipped.
+- 2.2: thrember installed from GitHub pinned to audited commit 0ef753e8 (declarative packaging, no install-time code;
+  only network code is explicit dataset download). `signify` pinned <0.8 (0.8+ renamed `SignedPEFile`).
+  New `scanner/ember_v3.py` (bounded wrapper, FEATURE_VERSION recorded). Proven: JSON round-trip of raw features ==
+  live extraction (training/inference parity by construction); real EMBER2024 records vectorize (2,568-D, finite);
+  deterministic across processes; golden vector hashes in `tests/golden/` detect extractor drift.
+  Deleted fake `scanner/ember_extractor.py`. Perf note: notepad.exe ≈400 ms (Authenticode parsing) → address in 2.4/5.3.
+  `ember` extra in pyproject; lockfile refreshed. 145 pass, 1 skipped.

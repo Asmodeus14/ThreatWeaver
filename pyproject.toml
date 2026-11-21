@@ -35,6 +35,13 @@ desktop = [
 build = [
     "pyinstaller>=6.0,<7",
 ]
+# EMBER2024 feature version 3 (official extractor, not on PyPI; pinned to an audited commit).
+# signify>=0.8 renamed SignedPEFile, which thrember imports.
+ember = [
+    "thrember @ git+https://github.com/FutureComputing4AI/EMBER2024.git@0ef753e81d98bf209f71b03cd331dfc190b5b54d",
+    "signify>=0.7.1,<0.8",
+    "lightgbm>=4.5,<5",
+]
 
 [project.scripts]
 threatweaver = "threatweaver.app.cli:main"
