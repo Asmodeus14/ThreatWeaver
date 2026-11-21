@@ -27,15 +27,15 @@ Defaults chosen (change any time): React + TypeScript frontend · signature bypa
 
 ## Phase 3 — Detection models
 - [~] 3.1 LightGBM primary detector, calibrated, FPR-targeted thresholds — .NET model done; Win64 pending download
-- [ ] 3.2 ResMLP retrained on v3 features (comparison / embeddings)
-- [ ] 3.3 Novelty v2 (kNN reference bank)
+- [x] 3.2 ResMLP retrained on v3 features (comparison / embeddings) — LightGBM wins; no ensemble
+- [x] 3.3 Novelty v2 — Mahalanobis selected; challenge AUROC 0.79, unseen-family 0.59 → kept out of verdicts
 - [~] 3.4 Model bundle + verdict policy v2 — wired in, opt-in via `--bundle` until the Win64 model is validated
 
 ## Phase 4 — Static analysis & evidence
-- [ ] 4.1 TreeSHAP grouped explanations
-- [ ] 4.2 Indicators from raw features
-- [ ] 4.3 YARA tier
-- [ ] 4.4 Local hash lists
+- [x] 4.1 TreeSHAP grouped explanations
+- [x] 4.2 Indicators from raw features
+- [x] 4.3 YARA tier
+- [x] 4.4 Local hash lists
 - [ ] 4.5 capa on demand (optional)
 
 ## Phase 5 — Architecture & performance
@@ -133,3 +133,14 @@ Defaults chosen (change any time): React + TypeScript frontend · signature bypa
   On System32 the .NET-only model gives 0 Likely Malicious but 16% Suspicious → native-binary training data required.
   Large files: thrember string features ≈0.75 s/MB (87 MB file → 65 s); timeout now 15 s + 1 s/MB (cap 180 s).
   Files > 100 MB report the real size-limit reason. 181 pass, 1 skipped.
+- 4.1: exact TreeSHAP (LightGBM pred_contrib) grouped into 12 thrember families; readable "Model attribution" evidence;
+  `/api/sample-details` returns real attribution (replaces fabricated 88/92/75 bars).
+- 3.2: residual MLP (3 real residual blocks, 64-D emb.) — test TPR@1%/0.1% FPR 0.908/0.646 vs LightGBM 0.955/0.835
+  (non-overlapping 95% CIs); mean ensemble 0.946/0.819 → worse than LightGBM alone → NOT adopted.
+- 3.3: novelty selected on val = Mahalanobis: test unseen-family AUROC 0.591 (CI 0.566–0.612), challenge vs benign 0.79
+  (shipped: 0.563); kNN 0.39 on challenge (worse than chance). Novelty stays out of verdicts until it improves.
+- 4.3/4.4: `detectors/known_bad.py` — offline hash lists (+labels), allowlist, YARA (compile cache, timeout); match →
+  Known Malicious naming the rule even at low model score; part of the cache fingerprint. No third-party rules bundled.
+- 4.2: `detectors/indicators.py` from thrember raw (packers, W^X, unpack targets, entry section, overlays, API combos,
+  signature anomalies, parser warnings). Tuned on 148 signed System32 files: dropped "future timestamp" (fired on 55% —
+  reproducible builds) and 1–2 parser warnings (17%). v2 path now parses each file once.
