@@ -7,7 +7,7 @@
 
 **Research prototype for static, zero-execution Windows PE triage.**
 
-ThreatWeaver inspects Portable Executable files as data (it never runs them), scores them with a small neural model, flags files that look unlike its training data, and lets you quarantine and restore files. It is a **research prototype, not an antivirus replacement**: it has no real-time protection, and its current detection quality is modest (see the measured results below). An improvement roadmap is tracked in [`ROADMAP_PROGRESS.md`](ROADMAP_PROGRESS.md).
+ThreatWeaver inspects Portable Executable files as data (it never runs them), scores them with a calibrated LightGBM detector on the official EMBER2024 features, explains each score, and lets you quarantine and restore files. It is a **research prototype, not an antivirus replacement**: it has no real-time protection. Every number below comes from an evaluation artifact in `artifacts/`. Progress is tracked in [`ROADMAP_PROGRESS.md`](ROADMAP_PROGRESS.md).
 
 ---
 
@@ -15,42 +15,54 @@ ThreatWeaver inspects Portable Executable files as data (it never runs them), sc
 
 | Capability | Status | Notes |
 | :--- | :--- | :--- |
-| Zero-execution static PE parsing (`pefile`) | Implemented | Files are read as bytes; never executed, loaded or emulated |
-| 256-D static feature vector | Implemented — **known issues** | Import buckets use Python `hash()`, which varies per process; training features differ from scan-time features (fix: roadmap 2.1–2.2) |
-| Neural classifier | Implemented | Shipped checkpoint is a plain MLP (256 → 256 → 128 → 128-D L2 embedding; 0 residual blocks), temperature-scaled (T = 1.11) |
-| Cosine novelty ("Unfamiliar") gate | Implemented — **weak** | Novelty AUROC 0.60 on the locked test split |
-| Authenticode / catalog verification | Implemented | Currently a full ML bypass for signed files (fix: roadmap 1.6) |
-| Hash cache, quarantine/restore, CLI, local UI, desktop wrapper | Implemented | Quarantine uses XOR masking (0x5A), not encryption |
-| Continual learning (4 replay strategies) | Experimental | Benchmarked on EMBER2024 .NET windows; in-app adaptation currently replays synthetic seed data |
+| Zero-execution static parsing in isolated workers | Implemented | Per-file timeout and memory cap; crashes and hangs become *Analysis Error* |
+| LightGBM detector on EMBER2024 v3 features (2,568-D, official `thrember` extractor) | Implemented (opt-in, `--bundle`) | Current bundle is trained on .NET files only; a Win64 + .NET model is in progress |
+| Calibrated thresholds (1% and 0.1% FPR on temporal validation) | Implemented | Drawn on the UI's verdict scale |
+| Per-file explanations (exact TreeSHAP) and static indicators | Implemented | Attributions explain the model, not the file's behaviour |
+| Known-bad tier: hash lists, allowlist, YARA | Implemented | No third-party rules bundled |
+| Authenticode / catalog verification | Implemented | Evidence for the v2 detector; still a bypass in the legacy path |
+| Legacy v0.1 neural model | Implemented (default until the Win64 model is validated) | Plain MLP on 256-D features; weak (see results) |
+| Novelty ("Unfamiliar") detection | Experimental | Separates evasive malware from benign (AUROC 0.79) but not unseen families (0.59); not used in v2 verdicts |
+| Observational folder watcher | Experimental | Alerts only; never blocks |
+| Opt-in MalwareBazaar hash lookups | Experimental | Off by default; hash only |
+| Gated retraining with analyst feedback | Experimental | Regression gate must pass |
 | Real-time protection / minifilter driver | Planned (design docs only) | See `docs/minifilter_architecture.md` |
 
 ---
 
-## User Interface & Visual Showcase
+## Interface
 
-### 1. Main Dashboard & System Overview
-Dataset and model facts read from local manifests and the loaded checkpoint, model temperature calibration, live cache hit-rates, and system threat status in an Apple-inspired minimalist aesthetic.
+The interface opens on what needs attention. Each file's score is drawn against the detector's real thresholds, with the evidence behind it.
 
-![ThreatWeaver Dashboard Overview](assets/screenshots/threatweaver_overview.png)
+![Overview](assets/screenshots/v2_overview.png)
 
-### 2. Static Scanning & Threat Triage Engine
-On-demand multi-threaded static inspection with Authenticode verification, neural model verdicts, section entropy profiling, and explainable evidence points.
+![Detection detail](assets/screenshots/v2_detection_detail.png)
 
-![ThreatWeaver Scan Screen](assets/screenshots/threatweaver_scan.png)
+![Model performance](assets/screenshots/v2_model_performance.png)
 
-### 3. Threat Web (Filesystem Cluster Space)
-Interactive graph of scanned files grouped by directory, coloured by their real scan verdicts.
-
-![ThreatWeaver Threat Web](assets/screenshots/threatweaver_threat_web.png)
-
-### 4. Neural Architecture & Data Flow Studio
-Illustrative animation of the pipeline (not live model activations): the 256-D feature extraction, MLP encoder, 128-D L2 projection, temperature scaling, and cosine novelty gating.
-
-![ThreatWeaver Neural Studio](assets/screenshots/threatweaver_neural_trace.png)
+![Threat web](assets/screenshots/v2_threat_web.png)
 
 ---
 
-## Measured Results (v0.1.0)
+## Measured Results
+
+### v0.2 LightGBM detector (.NET), official EMBER2024 test split
+
+Source: `artifacts/models/lgbm-v3-dotnet/eval.json`. 59,953 unique test files (30,000 malicious, 29,953 benign), all later in time than the training data; thresholds chosen on validation and applied unchanged.
+
+| Metric | Value (95% CI) |
+| :--- | :---: |
+| ROC-AUC | 0.9979 (0.9977–0.9981) |
+| Detection at 1% FPR | 95.5% (95.1–96.2%) |
+| Detection at 0.1% FPR | 83.5% (82.4–85.6%) |
+| Review threshold: detection / realised FPR | 95.5% / 0.99% |
+| High-confidence threshold: detection / realised FPR | 81.6% / 0.057% |
+| Evasive challenge set (.NET) caught at review threshold | 79.5% |
+| Model inference time | 0.016 ms per file (feature extraction dominates; see below) |
+
+This model is trained on .NET assemblies only and is not suitable for native Win32/Win64 executables: on signed System32 programs it labels none *Likely Malicious* but 16% *Suspicious*. A Win64 + .NET model is being trained.
+
+### v0.1.0 legacy model (for comparison)
 
 All values below come from files in `artifacts/`. Nothing here is a target or an estimate.
 
@@ -80,149 +92,102 @@ All values below come from files in `artifacts/`. Nothing here is a target or an
 ## Installation & Setup
 
 ### Prerequisites
-- Windows 10/11 x64 (or Linux/macOS for CLI and development)
-- Python 3.10 to 3.12 (Tested on Python 3.12.4)
-- Git
+- Windows 10/11 x64 (Linux/macOS work for the CLI and development; signature checks are Windows-only)
+- Python 3.10–3.12 (tested on 3.12.4)
+- Node.js 20 only if you want to rebuild the interface (the built UI is included)
 
 ### Quick Setup
 
 ```powershell
-# Clone the repository
 git clone https://github.com/Asmodeus14/ThreatWeaver.git
 cd ThreatWeaver
-
-# Create virtual environment
 python -m venv .venv
 .\.venv\Scripts\activate
 
-# Install dependencies in editable mode
-pip install -e .
+# Core install (CPU build of PyTorch)
+pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[dev]"
+
+# Optional: v2 detector (EMBER2024 v3 features, LightGBM) and YARA rules
+pip install -e ".[ember,rules]"
+
+# Exact, tested environment
+pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.lock.txt
 ```
 
 ---
 
-## Usage Instructions
+## Usage
 
-### 1. Launching the Web UI & Dashboard
-
-Start the local-first web interface with live inspection tools:
+### Interface
 
 ```powershell
-# Launch on default port (http://127.0.0.1:8765)
-threatweaver ui
-
-# Or specify custom host/port and disable automatic browser launch
-threatweaver ui --host 127.0.0.1 --port 9000 --no-browser
+threatweaver ui                                              # http://127.0.0.1:8765
+threatweaver ui --bundle artifacts/models/lgbm-v3-dotnet     # use the LightGBM (v2) detector
+threatweaver ui --print-token                                # print the API token for scripts
 ```
 
-### 2. Standalone Windows Desktop App
+The interface opens on what needs attention. Open any file to see its verdict, the calibrated score against the detector's real thresholds, what drove the score, static indicators, and actions (quarantine, label for learning). The classic v0.1 interface remains available at `/legacy`.
 
-ThreatWeaver includes a pre-packaged standalone Windows distribution:
+The API requires the per-session token (sent automatically by the UI). Scripts send it as the `X-ThreatWeaver-Token` header; the OpenAPI schema is at `/api/openapi.json`.
 
-```powershell
-# Run using the batch launcher
-.\ThreatWeaver.bat
-
-# Or run the compiled binary directly
-.\dist\ThreatWeaver\ThreatWeaver.exe
-```
-
-### 3. Command-Line Interface (CLI)
-
-#### On-Demand File & Directory Scanning
-Scan any directory or file with static PE extraction and export formatted reports:
+### Command line
 
 ```powershell
-# Scan a directory and export reports
-threatweaver scan samples/ --export-json reports/scan.json --export-md reports/scan.md
-
-# Scan with custom novelty threshold and calibrated confidence
-threatweaver scan C:\Windows\System32 --confidence-threshold 0.85
-```
-
-#### Safe Reversible Quarantine
-Safely isolate suspicious binaries into the XOR-encrypted vault:
-
-```powershell
-# Dry-run validation (checks permissions and path policies without moving)
+threatweaver scan C:\Users\you\Downloads --bundle artifacts/models/lgbm-v3-dotnet --export-md scan.md
 threatweaver quarantine suspicious_sample.exe --dry-run
-
-# Isolate file into vault
 threatweaver quarantine suspicious_sample.exe
-
-# List quarantined items
 threatweaver list-quarantine
-
-# Restore file from vault
 threatweaver restore <quarantine_id>
-```
-
-#### Model & Checkpoint Integrity Verification
-Verify the Ed25519 signature of a checkpoint (unsigned or tampered checkpoints are refused at load time):
-
-```powershell
 threatweaver verify-checkpoint --path artifacts/checkpoints/threatweaver_v1.pt
 ```
 
----
+### Known-bad rules, hash lists and threat intel (optional)
 
-## Architecture Overview
+Put files under `%LOCALAPPDATA%\ThreatWeaver\rules\`:
+- `hashes\*.txt`: one SHA-256 per line, optional `# label`
+- `allowlist\*.txt`: hashes you have reviewed and trust
+- `yara\**\*.yar`: your YARA rules (none are bundled)
 
-```text
-ThreatWeaver/
-├── assets/                   # Visual assets, app icons, and UI screenshots
-│   ├── threatweaver.ico
-│   └── screenshots/
-├── configs/                  # Model architectures, data split schemas, replay budgets
-│   ├── data.yaml
-│   ├── model.yaml
-│   └── experiments.yaml
-├── docs/                     # Research reports, threat models, kernel driver architecture
-│   ├── research_results.md
-│   ├── realtime_threat_model.md
-│   ├── minifilter_architecture.md
-│   └── data_integrity.md
-├── samples/                  # Safe synthetic PE binaries for validation
-│   ├── benign_utility.exe
-│   ├── benign_helper.dll
-│   ├── suspicious_packed.exe
-│   └── novelty_stub.exe
-├── src/threatweaver/
-│   ├── app/                  # UI server, Apple minimalist UI, CLI entrypoints, desktop runner
-│   │   ├── cli.py
-│   │   ├── desktop.py
-│   │   ├── server.py
-│   │   └── ui_html.py
-│   ├── data/                 # Temporal splitters, EMBER loader, normalization scalers
-│   ├── learning/             # Uncertainty+Diversity replay buffer, adaptation service
-│   ├── models/               # ResMLP encoder, classifier head, temperature scaling, novelty gate
-│   ├── quarantine/           # Reversible XOR isolation vault, atomic move, audit logging
-│   ├── reporting/            # Scan session history, JSON/Markdown export
-│   └── scanner/              # PE parser, 256-D extractor, Authenticode verifier, hash cache
-└── tests/                    # Automated unit and integration tests
-```
+A match makes the verdict *Known Malicious* and names the rule. MalwareBazaar hash lookups can be enabled in Settings with your own API key; only SHA-256 values are sent.
 
----
+### Watching a folder
 
-## Defensive Security Guarantees
+Settings, *Watch a folder*, scans executables as they appear or change (for example in Downloads). It only observes and alerts; it never blocks, moves or deletes files, and it is not real-time protection.
 
-ThreatWeaver adheres to strict defense-in-depth principles:
-- **Zero Untrusted Execution:** File evaluation parses PE headers and byte distributions statically. Code is never loaded or executed.
-- **Ed25519 Model Integrity:** Shipped checkpoints are signed with an offline release key (public key in `src/threatweaver/models/trusted_keys/`); locally adapted models are signed with a per-install key protected by Windows DPAPI. Unsigned, tampered or unknown-key checkpoints are refused at load time.
-- **Pickle Deserialization Protection:** Deserialization enforces `weights_only=True` to eliminate arbitrary code execution gadgets.
-- **Critical System Guardrails:** Quarantine operations strictly prohibit isolation of core Windows system files (`ntoskrnl.exe`, `explorer.exe`, `csrss.exe`, etc.).
-- **Symlink / TOCTOU Hardening:** Intended, but the current symlink check runs after path resolution and is ineffective (fix: roadmap 1.4).
+### Where data is stored
 
-For full details, see [SECURITY.md](SECURITY.md).
+The quarantine vault, scan history, cache, local model versions, keys and rules live in `%LOCALAPPDATA%\ThreatWeaver` (override with `THREATWEAVER_HOME`).
 
----
-
-## Test Suite
-
-Run the automated test suite:
+### Research workflow
 
 ```powershell
-pytest tests/ -v
+python tools/download_ember2024.py --target Dot_Net_train           # SHA-256 verified
+python tools/build_ember_v3_dataset.py --file-types Win64 Dot_Net
+python tools/train_lgbm.py --data-dir data/ember_v3 --name lgbm-v3
+python tools/train_lgbm.py ... --feedback labels.json --gate-against artifacts/models/lgbm-v3/eval.json
+python tools/reproduce_v01_eval.py                                  # continuity check of the v0.1 numbers
+```
+
+See [docs/architecture.md](docs/architecture.md) for the pipeline and component map.
+
+---
+
+## Security
+
+- Files are parsed as data in isolated worker processes with time and memory limits; nothing is executed.
+- The local API is protected against cross-site requests and DNS rebinding.
+- Models are Ed25519-signed and refused if unsigned or tampered; LightGBM loads from text, PyTorch with `weights_only=True`.
+- Quarantine rejects symlinks and junctions, protects Windows system folders by exact path, signs its manifest and verifies every restore.
+
+Details and the threat model: [SECURITY.md](SECURITY.md).
+
+---
+
+## Tests
+
+```powershell
+pytest -q                       # Python (unit, integration, security, fuzzing)
+cd frontend; npm test           # interface logic
 ```
 
 ---

@@ -2,44 +2,44 @@
 
 ## Supported Versions
 
-ThreatWeaver is actively maintained as an open-source defensive cybersecurity research platform and next-generation antivirus prototype. Security updates and patches are provided for the following releases:
+| Version | Supported          | Notes |
+| ------- | ------------------ | ----- |
+| 0.2.x   | :white_check_mark: | Hardened release (see below) |
+| 0.1.x   | :x:                | Contains the vulnerabilities fixed in 0.2 — upgrade |
 
-| Version | Supported          | Status         |
-| ------- | ------------------ | -------------- |
-| 0.1.x   | :white_check_mark: | Current Active |
-| < 0.1.0 | :x:                | Deprecated     |
-
----
-
-## Defensive Architecture & Core Security Guarantees
-
-ThreatWeaver is engineered from the ground up to analyze potentially malicious, packed, and hostile Portable Executable (PE) binaries without exposing the host operating system to compromise:
-
-### 1. Zero-Execution Static Analysis
-- **Non-Executing Inspection:** All binary evaluation is strictly static. Binaries are read strictly as raw byte streams and structured PE headers (`pefile`).
-- **No Dynamic Sandboxing:** Binaries are never executed, injected, or loaded as runtime libraries (`LoadLibrary` is never invoked on inspected targets).
-- **Safe Parsing Protections:** Header parsing implements strict size limits, recursion limits, and exception traps to mitigate PE parsing denial-of-service or memory corruption vectors.
-
-### 2. Checkpoint Integrity & Deserialization Defense
-- **HMAC-SHA256 Signature Verification:** Model checkpoints (`.pt`) are paired with cryptographic HMAC-SHA256 signatures (`.sig`). Checkpoints failing signature verification are rejected immediately before deserialization.
-- **`weights_only=True` Safe Deserialization:** PyTorch model weights are deserialized strictly using `weights_only=True`, blocking Python pickle-based Remote Code Execution (RCE) gadgets and arbitrary object instantiation.
-
-### 3. Reversible Isolation Quarantine
-- Quarantined binaries are neutralized using a reversible byte-inversion XOR envelope before storage in `.threatweaver/quarantine/`.
-- Quarantined files are rendered inert and unexecutable by the host operating system until explicitly restored by the user.
-
-### 4. Deterministic Hash Caching
-- SHA-256 digests are computed for all evaluated binaries and indexed in a local SQLite database (`.threatweaver/hash_cache.db`).
-- Cache lookups bypass repetitive parsing while guaranteeing that any byte-level mutation automatically triggers a complete re-evaluation.
+ThreatWeaver is a research prototype for static triage of Windows PE files. It is not an antivirus replacement and provides no real-time protection.
 
 ---
 
-## Safe Handling of Malware Binaries
+## Threat model
 
-When using ThreatWeaver to evaluate live malware or untrusted executables:
-- Always operate within an isolated virtual machine or dedicated analysis sandbox.
-- Do not run ThreatWeaver as an elevated user (`Administrator` or `root`) unless scanning system-protected directories is specifically required.
-- Do not execute sample files in `samples/` or test directories outside an isolated lab environment.
+ThreatWeaver processes hostile input (untrusted executables) and exposes a local HTTP API. It is designed so that neither a malicious file nor a malicious web page can turn it against the user.
+
+| Threat | Mitigation (0.2) |
+| :--- | :--- |
+| A web page in the user's browser drives the local API (CSRF / DNS rebinding) to quarantine, restore or reconfigure | Per-session token required on every `/api` request in a custom header; Host allow-list; foreign `Origin` rejected; no CORS; JSON-only bodies; 1 MiB body cap (`app/security.py`) |
+| Path tricks in API input (device paths, UNC shares, NTFS alternate data streams) | Path policy rejects `\\.\`, `\\?\`, UNC and `file:stream` forms before any file access |
+| A malformed or hostile PE hangs or crashes the parser | Parsing runs in isolated worker processes with a per-file timeout and a Windows Job Object memory cap; a timeout or crash becomes an *Analysis Error* verdict ("treat as unknown, not benign"); seeded fuzz tests cover truncated and corrupted headers |
+| Tampered or substituted model files | Ed25519 signatures: shipped models are release-signed (public key in `src/threatweaver/models/trusted_keys/`); locally adapted models are signed with a per-install key protected by Windows DPAPI. Unsigned, tampered or unknown-key models are refused. PyTorch checkpoints load with `weights_only=True`; LightGBM models load from text (no pickle) |
+| Runtime learning overwrites the shipped model | The shipped and loaded checkpoints are read-only; adaptations become new versioned files; retraining is accepted only through a regression gate |
+| Cached "benign" verdict reused for a swapped file | The cache is keyed on the file's SHA-256 and an engine fingerprint (model, thresholds, rules, policy version) — not on path or timestamp |
+| Signed malware (stolen or abused certificates) | A valid signature is evidence only; it never suppresses a high model score (v2 detector). The legacy model path still skips the model for signed files until the v2 detector is the default |
+| Quarantine abuse (symlinks, junctions, protected OS files, tampered manifest) | Reparse points rejected on the unresolved path and every parent; protected `%SystemRoot%` locations matched by exact prefix; the vault manifest is signed; restores verify the data-file location, destination path and SHA-256 |
+| Leaking user data to third parties | Fully offline by default. Optional MalwareBazaar lookups send only a file's SHA-256, require an explicit opt-in and an API key (stored with DPAPI) |
+
+Known limitations:
+- Quarantine uses a constant XOR mask so stored files cannot run by accident. It is neutralisation, not encryption.
+- YARA rules run in the main process (libyara, with a per-file timeout); move them into the sandbox if you load untrusted rule sets.
+- The bundled release signing key belongs to the maintainer; forks must generate their own (`tools/sign_release_checkpoints.py --generate-key`).
+
+---
+
+## Safe handling of malware samples
+
+- ThreatWeaver never executes, loads or emulates the files it inspects.
+- Still, analyse live malware only inside an isolated virtual machine.
+- Do not run ThreatWeaver elevated unless you need to scan protected directories.
+- The files in `samples/` are harmless synthetic stubs for testing.
 
 ---
 
