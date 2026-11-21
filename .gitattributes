@@ -1,0 +1,9 @@
+# Signed and hashed artifacts must be byte-exact on every platform: never convert line endings.
+# (core.autocrlf=true would otherwise rewrite LF->CRLF on Windows checkouts and invalidate
+#  Ed25519 signatures and recorded SHA-256 digests.)
+artifacts/** -text
+*.ed25519 -text
+src/threatweaver/models/trusted_keys/*.pub -text
+tests/golden/** -text
+*.pt binary
+*.dat binary
