@@ -471,6 +471,17 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
         out = {k: m.get(k) for k in keys}
         out["available"] = True
         out["source"] = str(p)
+        # EMBER2024 files contain every sample twice; prefer unique-SHA-256 counts when available.
+        fam = Path("artifacts/dataset/family_summary.json")
+        if fam.is_file():
+            try:
+                totals = json.loads(fam.read_text(encoding="utf-8")).get("totals", {})
+                if "unique_samples" in totals:
+                    out["unique_samples"] = totals["unique_samples"]
+                    out["unique_benign"] = totals.get("unique_benign", 0)
+                    out["unique_malicious"] = totals.get("unique_malicious", 0)
+            except (OSError, ValueError):
+                pass
         return out
 
     def _serve_embedding_ablation(self) -> None:

@@ -1646,13 +1646,20 @@ function loadSystemStatus() {
     setTxt("chipTau", (typeof st.novelty_threshold === "number") ? `Calibrated threshold τ = ${st.novelty_threshold.toFixed(4)} (OOD)` : "—");
     let ds = st.dataset || {};
     if (ds.available) {
-      setTxt("cardSamples", ds.samples.toLocaleString());
-      setTxt("cardBenign", ds.benign.toLocaleString());
-      setTxt("cardMal", ds.malicious.toLocaleString());
-      setTxt("cardSamplesSub", `${ds.corrupt_records} corrupt records · ${(ds.total_bytes / 1e9).toFixed(1)} GB · ${(ds.time_span || []).join(" → ")}`);
-      setTxt("cardBenignSub", `${fmtPct(ds.benign / ds.samples, 1)} of local records`);
-      setTxt("cardMalSub", `${fmtPct(ds.malicious / ds.samples, 1)} of local records (dataset labels)`);
-      setTxt("datasetPill", `EMBER2024 · ${ds.samples.toLocaleString()} LOCAL RECORDS · ${ds.verified ? "MANIFEST VERIFIED" : "UNVERIFIED"}`);
+      const hasUnique = typeof ds.unique_samples === "number";
+      const total = hasUnique ? ds.unique_samples : ds.samples;
+      const ben = hasUnique ? ds.unique_benign : ds.benign;
+      const mal = hasUnique ? ds.unique_malicious : ds.malicious;
+      document.querySelector("#cardSamples").previousElementSibling.textContent = hasUnique ? "UNIQUE LOCAL SAMPLES" : "LOCAL DATASET RECORDS";
+      setTxt("cardSamples", total.toLocaleString());
+      setTxt("cardBenign", ben.toLocaleString());
+      setTxt("cardMal", mal.toLocaleString());
+      setTxt("cardSamplesSub", hasUnique
+        ? `${ds.samples.toLocaleString()} JSONL records (each sample appears twice) · ${(ds.total_bytes / 1e9).toFixed(1)} GB`
+        : `${ds.corrupt_records} corrupt records · ${(ds.total_bytes / 1e9).toFixed(1)} GB · ${(ds.time_span || []).join(" → ")}`);
+      setTxt("cardBenignSub", `${fmtPct(ben / total, 1)} of local samples`);
+      setTxt("cardMalSub", `${fmtPct(mal / total, 1)} of local samples (dataset labels)`);
+      setTxt("datasetPill", `EMBER2024 · ${total.toLocaleString()} ${hasUnique ? "UNIQUE SAMPLES" : "LOCAL RECORDS"} · ${ds.verified ? "MANIFEST VERIFIED" : "UNVERIFIED"}`);
     } else {
       setTxt("datasetPill", "No dataset manifest");
       setTxt("cardSamplesSub", ds.reason || "Run the dataset verifier to create a manifest.");

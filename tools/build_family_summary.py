@@ -5,6 +5,9 @@ Reads only the metadata prefix of each record (everything before the large
 Output: artifacts/dataset/family_summary.json, consumed by /api/families.
 
 Every number in the output is counted from the dataset; nothing is invented.
+
+EMBER2024 JSONL files contain every sample TWICE (identical except for the `caps` field),
+so all counts here are over unique SHA-256 values; raw line counts are reported separately.
 """
 
 from __future__ import annotations
@@ -44,6 +47,8 @@ def summarize(data_dir: Path, min_confidence: float, top_n: int) -> Dict[str, An
     fam_partitions: Dict[str, Counter[str]] = defaultdict(Counter)
     fam_tags: Dict[str, Dict[str, Counter[str]]] = defaultdict(lambda: defaultdict(Counter))
     totals = Counter()
+    seen: set = set()
+    unique_by_partition: Dict[str, Counter] = defaultdict(Counter)
 
     files = sorted(data_dir.rglob("*.jsonl"))
     file_digests = {}
@@ -60,8 +65,19 @@ def summarize(data_dir: Path, min_confidence: float, top_n: int) -> Dict[str, An
                     totals["unparseable"] += 1
                     continue
                 totals["records"] += 1
-                if rec.get("label") != 1:
+                sha = rec.get("sha256")
+                if sha in seen:
+                    totals["duplicate_records"] += 1
                     continue
+                seen.add(sha)
+                totals["unique_samples"] += 1
+                lbl = rec.get("label")
+                unique_by_partition[partition]["benign" if lbl == 0 else "malicious" if lbl == 1 else "unlabeled"] += 1
+                if lbl != 1:
+                    if lbl == 0:
+                        totals["unique_benign"] += 1
+                    continue
+                totals["unique_malicious"] += 1
                 totals["malicious"] += 1
                 fam = rec.get("family")
                 conf = float(rec.get("family_confidence") or 0.0)
@@ -106,11 +122,12 @@ def summarize(data_dir: Path, min_confidence: float, top_n: int) -> Dict[str, An
     return {
         "available": True,
         "kind": "dataset_metadata",
-        "source": "EMBER2024 record metadata (family, family_confidence, behavior, packer, ...) from local JSONL files",
+        "source": "EMBER2024 record metadata (family, family_confidence, behavior, packer, ...) from local JSONL files; counts are unique SHA-256 samples",
         "data_dir": str(data_dir),
         "min_family_confidence": min_confidence,
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "totals": dict(totals),
+        "unique_by_partition": {k: dict(v) for k, v in sorted(unique_by_partition.items())},
         "distinct_families": len(fam_counts),
         "families": families,
         "source_file_sha256": file_digests,

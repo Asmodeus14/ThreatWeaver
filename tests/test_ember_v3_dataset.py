@@ -94,3 +94,63 @@ def test_vectors_match_direct_extraction(tmp_path: Path):
     by_sha = {json.loads(l)["sha256"]: l for l in lines[6:]}
     for i, sha in enumerate(meta["sha256"].to_list()):
         assert np.array_equal(X[i], ext.vector_from_record(by_sha[sha].decode()))
+
+
+def test_train_lgbm_smoke(tmp_path: Path):
+    """End-to-end: build a small real-record dataset, train, calibrate, evaluate, sign."""
+    import subprocess
+    import sys
+
+    lines = _real_lines(400)
+    data = tmp_path / "ember2024"
+    _write(data / "Dot_Net_train" / "w1.jsonl", lines[:150])
+    _write(data / "Dot_Net_train" / "w2.jsonl", lines[150:300])
+    _write(data / "Dot_Net_test" / "t1.jsonl", lines[300:])
+    out = tmp_path / "v3"
+    build_dataset(data, out, file_types=["Dot_Net"], val_weeks=0, workers=2, log=lambda *_: None)
+    # val_weeks=0 yields no val split; carve one by rebuilding with every record's own week as val
+    m = json.loads((out / "manifest.json").read_text())
+    if "val" not in m["splits"]:
+        import shutil
+        for f in ("X", "y", "meta"):
+            for ext in (".dat", ".npy", ".parquet"):
+                src = out / f"{f}_test{ext}"
+                if src.exists():
+                    shutil.copy(src, out / f"{f}_val{ext}")
+        m["splits"]["val"] = m["splits"]["test"]
+        from threatweaver.data.ember_v3_dataset import sha256_file
+        m["output_files"] = {p.name: sha256_file(p) for p in out.iterdir() if p.suffix in (".dat", ".npy", ".parquet")}
+        (out / "manifest.json").write_text(json.dumps(m))
+    r = subprocess.run([sys.executable, str(REPO / "tools" / "train_lgbm.py"), "--data-dir", str(out), "--name", "smoke",
+                        "--rounds", "5", "--num-leaves", "8", "--min-data-in-leaf", "5", "--out-root", str(tmp_path / "models")],
+                       capture_output=True, text=True, timeout=600)
+    assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
+    bundle = json.loads((tmp_path / "models" / "smoke" / "bundle.json").read_text())
+    assert bundle["feature_version"].startswith("ember-v3") and bundle["num_trees"] == 5
+    ev = json.loads((tmp_path / "models" / "smoke" / "eval.json").read_text())
+    assert ev["schema"] == "eval/1" and "test" in ev["splits"]
+    from threatweaver.models import signing
+    assert signing.verify_file(tmp_path / "models" / "smoke" / "model.txt").valid
+
+    # Bundle loader: valid bundle predicts; tampering and version drift are refused
+    from threatweaver.models.bundle import BundleError, LGBMBundle
+    bdir = tmp_path / "models" / "smoke"
+    b = LGBMBundle.load(bdir)
+    X, _, _ = load_split(out, "test")
+    p = b.predict_proba(X[:5])
+    assert p.shape == (5,) and np.all((p >= 0) & (p <= 1))
+    assert 0 <= b.tau_low <= b.tau_high <= 1
+
+    meta = json.loads((bdir / "bundle.json").read_text())
+    meta["feature_version"] = "ember-v2"
+    (bdir / "bundle.json").write_text(json.dumps(meta))
+    with pytest.raises(BundleError, match="integrity"):       # edited after signing
+        LGBMBundle.load(bdir)
+    signing.sign_file(bdir / "bundle.json")                    # even if re-signed locally...
+    with pytest.raises(BundleError, match="Feature version"):  # ...version drift is refused
+        LGBMBundle.load(bdir)
+
+    with open(bdir / "model.txt", "a", encoding="utf-8") as f:
+        f.write("\n")
+    with pytest.raises(BundleError):
+        LGBMBundle.load(bdir)
