@@ -8,7 +8,7 @@ dist/
 build/
 
 # ThreatWeaver Raw Datasets & Large Archives
-data/
+/data/
 *.zip
 
 # Runtime Storage & User State
@@ -27,3 +27,6 @@ htmlcov/
 .idea/
 Thumbs.db
 Desktop.ini
+
+# Locally adapted model versions (user-specific)
+artifacts/models/local/

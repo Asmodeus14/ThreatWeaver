@@ -3,66 +3,77 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python: 3.10+](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)](https://www.python.org/)
 [![Platform: Windows x64](https://img.shields.io/badge/platform-Windows%20x64-lightgrey)](https://github.com/Asmodeus14/ThreatWeaver)
-[![Tests: 84 Passed](https://img.shields.io/badge/tests-84%20passed-brightgreen)](tests/)
 [![Security: Zero-Execution](https://img.shields.io/badge/security-zero--execution-success)](SECURITY.md)
 
-**AI-Powered Malware Research Engine & Next-Generation Antivirus Prototype**
+**Research prototype for static, zero-execution Windows PE triage.**
 
-ThreatWeaver is a defensive cybersecurity platform and next-generation Windows antivirus prototype engineered for static Portable Executable (PE) inspection without execution. Combining deep neural representation learning, temperature-calibrated uncertainty estimation, out-of-distribution novelty detection, and catastrophic-forgetting-resistant continual adaptation, ThreatWeaver delivers robust binary triage with zero dynamic execution risks.
+ThreatWeaver inspects Portable Executable files as data (it never runs them), scores them with a small neural model, flags files that look unlike its training data, and lets you quarantine and restore files. It is a **research prototype, not an antivirus replacement**: it has no real-time protection, and its current detection quality is modest (see the measured results below). An improvement roadmap is tracked in [`ROADMAP_PROGRESS.md`](ROADMAP_PROGRESS.md).
 
 ---
 
-## Key Highlights
+## Feature Status
 
-- **Zero-Execution Static Triage:** Binaries are parsed strictly as raw data and structured PE headers. Untrusted code is never executed, injected, or emulated.
-- **ResMLP Representation Pipeline:** 256-dimensional structural and statistical PE features are projected into a 128-dimensional unit hypersphere via a residual multilayer perceptron.
-- **Calibrated Uncertainty ($ECE = 0.0147$):** Post-hoc Platt temperature scaling ($T = 1.11$) ensures model output probabilities reflect true empirical likelihoods.
-- **Cosine Novelty Gate (Out-of-Distribution Detection):** Isolates zero-day variants and unfamiliar binaries by computing cosine distances to known benign and malware prototype clusters.
-- **Continual Adaptation Without Forgetting:** Dual adaptation mechanics:
-  - *Option A (Instant Zero-Risk Prototype Registration):* Registers new cluster centroids in the 128-D novelty space instantly without modifying model weights.
-  - *Option B (Uncertainty + Diversity Replay Fine-Tuning):* Adapts neural weights on new verified threats alongside anchored replay baselines to eliminate catastrophic forgetting.
-- **Reversible Neutralized Quarantine:** Isolates threats into a protected vault with reversible XOR byte scrambling (`0x5A`) to prevent execution while safeguarding recovery.
-- **Native Windows Desktop Packaging:** Packaged into a standalone Windows executable (`dist/ThreatWeaver/ThreatWeaver.exe`) and double-clickable desktop launcher (`ThreatWeaver.bat`).
+| Capability | Status | Notes |
+| :--- | :--- | :--- |
+| Zero-execution static PE parsing (`pefile`) | Implemented | Files are read as bytes; never executed, loaded or emulated |
+| 256-D static feature vector | Implemented — **known issues** | Import buckets use Python `hash()`, which varies per process; training features differ from scan-time features (fix: roadmap 2.1–2.2) |
+| Neural classifier | Implemented | Shipped checkpoint is a plain MLP (256 → 256 → 128 → 128-D L2 embedding; 0 residual blocks), temperature-scaled (T = 1.11) |
+| Cosine novelty ("Unfamiliar") gate | Implemented — **weak** | Novelty AUROC 0.60 on the locked test split |
+| Authenticode / catalog verification | Implemented | Currently a full ML bypass for signed files (fix: roadmap 1.6) |
+| Hash cache, quarantine/restore, CLI, local UI, desktop wrapper | Implemented | Quarantine uses XOR masking (0x5A), not encryption |
+| Continual learning (4 replay strategies) | Experimental | Benchmarked on EMBER2024 .NET windows; in-app adaptation currently replays synthetic seed data |
+| Real-time protection / minifilter driver | Planned (design docs only) | See `docs/minifilter_architecture.md` |
 
 ---
 
 ## User Interface & Visual Showcase
 
 ### 1. Main Dashboard & System Overview
-Real-time KPI telemetry, model temperature calibration, live cache hit-rates, and system threat status in an Apple-inspired minimalist aesthetic.
+Dataset and model facts read from local manifests and the loaded checkpoint, model temperature calibration, live cache hit-rates, and system threat status in an Apple-inspired minimalist aesthetic.
 
 ![ThreatWeaver Dashboard Overview](assets/screenshots/threatweaver_overview.png)
 
 ### 2. Static Scanning & Threat Triage Engine
-On-demand multi-threaded static inspection with Authenticode verification, ResMLP neural verdicts, section entropy profiling, and explainable evidence points.
+On-demand multi-threaded static inspection with Authenticode verification, neural model verdicts, section entropy profiling, and explainable evidence points.
 
 ![ThreatWeaver Scan Screen](assets/screenshots/threatweaver_scan.png)
 
 ### 3. Threat Web (Filesystem Cluster Space)
-Interactive 3D graph visualizing inspected executables, cluster centroids, relational links, and anomalous out-of-distribution nodes.
+Interactive graph of scanned files grouped by directory, coloured by their real scan verdicts.
 
 ![ThreatWeaver Threat Web](assets/screenshots/threatweaver_threat_web.png)
 
 ### 4. Neural Architecture & Data Flow Studio
-Real-time trace through the 256-D feature extraction, ResMLP encoder, 128-D L2 projection, temperature scaling, and cosine novelty gating.
+Illustrative animation of the pipeline (not live model activations): the 256-D feature extraction, MLP encoder, 128-D L2 projection, temperature scaling, and cosine novelty gating.
 
 ![ThreatWeaver Neural Studio](assets/screenshots/threatweaver_neural_trace.png)
 
 ---
 
-## Empirical Benchmark Results
+## Measured Results (v0.1.0)
 
-ThreatWeaver was evaluated against temporal splits and verified system baselines:
+All values below come from files in `artifacts/`. Nothing here is a target or an estimate.
 
-| Metric | ThreatWeaver v0.1.0 | Baseline / Target | Notes |
-| :--- | :---: | :---: | :--- |
-| **Validation F1 Score** | **0.9089** | > 0.8500 | 128-D ResMLP Embedding |
-| **ROC-AUC** | **0.9592** | > 0.9200 | Calibrated Output |
-| **Expected Calibration Error (ECE)** | **0.0147** | < 0.0500 | Temperature-Scaled ($T=1.11$) |
-| **Windows System32 False Positive Rate (FPR)** | **0.00%** | < 0.10% | Zero False Positives on System Binaries |
-| **Authenticode Signature Bypass** | **< 1 ms** | Instant | Microsoft-signed binaries verified |
-| **Cached Scan Latency** | **< 4 ms** | Real-time | SQLite SHA-256 cache lookup |
-| **Cold PE Feature Extraction & Inference** | **~42 ms** | < 100 ms | 256-D static feature extraction |
+**Locked test split, shipped 128-D model** (`artifacts/benchmarks/selected_embedding_dimension.json`)
+
+| Metric | Value |
+| :--- | :---: |
+| Macro-F1 | 0.868 |
+| ROC-AUC | 0.937 |
+| PR-AUC | 0.933 |
+| Detection rate at 1% FPR | 0.180 |
+| FPR at 95% recall | 0.329 |
+| Expected Calibration Error | 0.046 |
+| Novelty AUROC | 0.601 |
+| Evasive "challenge" malware flagged as unfamiliar | 22.2% |
+
+**Simple baselines on the same features** (`artifacts/benchmarks/baseline_results.json`): HistGradientBoosting macro-F1 0.915, detection at 1% FPR 0.547; RandomForest macro-F1 0.906.
+
+**Important caveats**
+
+- The test split has only **750 samples spanning about 30 hours**, drawn from EMBER2024 *test* partitions (Win64 + .NET). The official EMBER2024 train partitions were not used. Treat these numbers as indicative, not as operational performance.
+- **System32 false positives:** signed Windows binaries are currently accepted by the Authenticode tier without running the model. With that tier disabled, the model scored 38 of 200 System32 `.exe` files (19%) at P(malware) ≥ 0.5 and labelled 65 (32.5%) "Unfamiliar" (measured 2026-11-21). The earlier "0% System32 FPR" figure reflected the signature bypass, not the model.
+- Cold scan latency measured at about **135 ms per file** on the System32 sample above (single process, includes parsing).
 
 ---
 
@@ -147,10 +158,10 @@ threatweaver restore <quarantine_id>
 ```
 
 #### Model & Checkpoint Integrity Verification
-Verify HMAC-SHA256 checkpoint signatures to guard against tampering:
+Verify the Ed25519 signature of a checkpoint (unsigned or tampered checkpoints are refused at load time):
 
 ```powershell
-threatweaver verify-checkpoint artifacts/checkpoints/threatweaver_v1.pt
+threatweaver verify-checkpoint --path artifacts/checkpoints/threatweaver_v1.pt
 ```
 
 ---
@@ -188,7 +199,7 @@ ThreatWeaver/
 │   ├── quarantine/           # Reversible XOR isolation vault, atomic move, audit logging
 │   ├── reporting/            # Scan session history, JSON/Markdown export
 │   └── scanner/              # PE parser, 256-D extractor, Authenticode verifier, hash cache
-└── tests/                    # 84 automated unit and integration tests
+└── tests/                    # Automated unit and integration tests
 ```
 
 ---
@@ -197,10 +208,10 @@ ThreatWeaver/
 
 ThreatWeaver adheres to strict defense-in-depth principles:
 - **Zero Untrusted Execution:** File evaluation parses PE headers and byte distributions statically. Code is never loaded or executed.
-- **HMAC-SHA256 Model Integrity:** Checkpoints are cryptographically signed to prevent model tampering.
+- **Ed25519 Model Integrity:** Shipped checkpoints are signed with an offline release key (public key in `src/threatweaver/models/trusted_keys/`); locally adapted models are signed with a per-install key protected by Windows DPAPI. Unsigned, tampered or unknown-key checkpoints are refused at load time.
 - **Pickle Deserialization Protection:** Deserialization enforces `weights_only=True` to eliminate arbitrary code execution gadgets.
 - **Critical System Guardrails:** Quarantine operations strictly prohibit isolation of core Windows system files (`ntoskrnl.exe`, `explorer.exe`, `csrss.exe`, etc.).
-- **Symlink / TOCTOU Hardening:** Reparse points and symbolic links are resolved and checked prior to file operations.
+- **Symlink / TOCTOU Hardening:** Intended, but the current symlink check runs after path resolution and is ineffective (fix: roadmap 1.4).
 
 For full details, see [SECURITY.md](SECURITY.md).
 
@@ -208,7 +219,7 @@ For full details, see [SECURITY.md](SECURITY.md).
 
 ## Test Suite
 
-Run the full automated test suite (84 passing tests):
+Run the automated test suite:
 
 ```powershell
 pytest tests/ -v
