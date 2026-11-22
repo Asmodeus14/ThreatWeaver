@@ -22,7 +22,7 @@ file ─► SHA-256 (single streaming read)
      Known Malicious · Likely Malicious · Suspicious · Unfamiliar · Trusted Signer · Likely Benign · errors
 ```
 
-The legacy v0.1 neural model remains available (and is the default until the Win64-trained LightGBM bundle is validated); select the v2 detector with `--bundle`.
+The LightGBM bundle `artifacts/models/lgbm-v3-win64-dotnet` (Win64 + .NET) is the default detector; `--bundle` selects another signed bundle and `--legacy` the v0.1 neural model. If LightGBM or thrember is not installed, the legacy model is used and a notice is printed.
 
 ## Components
 

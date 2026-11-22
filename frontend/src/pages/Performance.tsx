@@ -18,7 +18,8 @@ export function Performance() {
   const [id, setId] = useState<string | null>(null);
   useEffect(() => {
     if (!id && list.data?.evals.length) {
-      const preferred = list.data.evals.find((e) => e.id.startsWith("lgbm")) ?? list.data.evals[0];
+      const evals = list.data.evals;
+      const preferred = evals.find((e) => e.active) ?? evals.find((e) => e.id.startsWith("lgbm")) ?? evals[0];
       setId(preferred.id);
     }
   }, [list.data, id]);
@@ -35,7 +36,7 @@ export function Performance() {
           <select value={id ?? ""} onChange={(e) => setId(e.target.value)} aria-label="Evaluation">
             {list.data.evals.map((e) => (
               <option key={e.id} value={e.id}>
-                {e.id} ({e.kind})
+                {e.id} ({e.active ? "in use" : e.kind})
               </option>
             ))}
           </select>

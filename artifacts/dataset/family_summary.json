@@ -1,744 +1,541 @@
 {
   "available": true,
   "kind": "dataset_metadata",
-  "source": "EMBER2024 record metadata (family, family_confidence, behavior, packer, ...) from local JSONL files",
+  "source": "EMBER2024 record metadata (family, family_confidence, behavior, packer, ...) from local JSONL files; counts are unique SHA-256 samples",
   "data_dir": "C:\\CODE\\ThreatWeaver\\data\\ember2024",
   "min_family_confidence": 0.7,
-  "generated_at": "2026-11-21T10:19:28Z",
+  "generated_at": "2026-11-22T02:52:34Z",
   "totals": {
-    "records": 1086315,
-    "malicious": 546315,
-    "malicious_low_confidence_family": 298587,
-    "malicious_no_family": 78261,
-    "malicious_with_family": 169467
+    "records": 2646315,
+    "unique_samples": 1326255,
+    "unique_malicious": 666315,
+    "malicious": 666315,
+    "malicious_low_confidence_family": 365642,
+    "malicious_no_family": 121877,
+    "malicious_with_family": 178796,
+    "unique_benign": 659940,
+    "duplicate_records": 1320060
   },
-  "distinct_families": 1462,
-  "families": [
-    {
-      "id": "fam-berbew",
-      "name": "berbew",
-      "sample_count": 74612,
-      "mean_family_confidence": 0.8598,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 74612
-      },
-      "partitions": {
-        "Win32_test": 74612
-      },
-      "tags": {
-        "behavior": {
-          "backdoor": 74450,
-          "spyware": 8494,
-          "proxy": 5116,
-          "cryptor": 10,
-          "downloader": 6
-        }
-      }
+  "unique_by_partition": {
+    "Dot_Net_test": {
+      "benign": 29953,
+      "malicious": 30000
     },
+    "Dot_Net_train": {
+      "benign": 130000,
+      "malicious": 130000
+    },
+    "Win32_test": {
+      "malicious": 180000,
+      "benign": 179994
+    },
+    "Win64_test": {
+      "benign": 59993,
+      "malicious": 60000
+    },
+    "Win64_train": {
+      "benign": 260000,
+      "malicious": 260000
+    },
+    "challenge": {
+      "malicious": 6315
+    }
+  },
+  "distinct_families": 2059,
+  "families": [
     {
       "id": "fam-expiro",
       "name": "expiro",
-      "sample_count": 15020,
-      "mean_family_confidence": 0.8573,
-      "first_seen": "2024-09-22",
+      "sample_count": 54468,
+      "mean_family_confidence": 0.8623,
+      "first_seen": "2023-09-24",
       "last_seen": "2024-12-14",
       "file_types": {
-        "Win64": 7734,
-        "Win32": 7286
+        "Win64": 50825,
+        "Win32": 3643
       },
       "partitions": {
-        "Win64_test": 7734,
-        "Win32_test": 7286
+        "Win64_train": 46958,
+        "Win64_test": 3867,
+        "Win32_test": 3643
       },
       "tags": {
         "behavior": {
-          "virus": 14990
+          "virus": 54343,
+          "coinminer": 1
         },
         "file_property": {
-          "vb": 2
+          "vb": 1
         },
         "packer": {
-          "vmprotect": 70,
-          "themida": 4,
-          "upx": 2
+          "vmprotect": 367,
+          "themida": 8,
+          "nsis": 2,
+          "upx": 1
         },
         "exploit": {
-          "cve_2015_0057": 6,
+          "cve_2015_0057": 66,
           "cve_2018_8120": 2
         }
       }
     },
     {
-      "id": "fam-cosmu",
-      "name": "cosmu",
-      "sample_count": 10078,
-      "mean_family_confidence": 0.83,
-      "first_seen": "2024-09-22",
+      "id": "fam-berbew",
+      "name": "berbew",
+      "sample_count": 37307,
+      "mean_family_confidence": 0.8598,
+      "first_seen": "2024-06-03",
       "last_seen": "2024-12-14",
       "file_types": {
-        "Win32": 9156,
-        "Win64": 922
+        "Win32": 37306,
+        "Win64": 1
       },
       "partitions": {
-        "Win32_test": 9156,
-        "Win64_test": 922
+        "Win32_test": 37306,
+        "Win64_train": 1
       },
       "tags": {
         "behavior": {
-          "ransom": 384,
-          "downloader": 68,
-          "fakealert": 66,
-          "worm": 48,
-          "encoder": 26
-        },
-        "file_property": {
-          "vb": 34
-        },
-        "packer": {
-          "nsis": 194,
-          "upx": 10
-        },
-        "group": {
-          "gamaredon": 174
-        }
-      }
-    },
-    {
-      "id": "fam-floxif",
-      "name": "floxif",
-      "sample_count": 5286,
-      "mean_family_confidence": 0.8568,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 5284,
-        "Win64": 2
-      },
-      "partitions": {
-        "Win32_test": 5284,
-        "Win64_test": 2
-      },
-      "tags": {
-        "behavior": {
-          "virus": 4776,
-          "worm": 6,
-          "antiav": 2,
-          "backdoor": 2
-        },
-        "packer": {
-          "upx": 592
-        },
-        "exploit": {
-          "cve_2018_8120": 14,
-          "cve_2010_0232": 2
-        }
-      }
-    },
-    {
-      "id": "fam-virlock",
-      "name": "virlock",
-      "sample_count": 4424,
-      "mean_family_confidence": 0.8663,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 4424
-      },
-      "partitions": {
-        "Win32_test": 4424
-      },
-      "tags": {
-        "behavior": {
-          "virus": 4216,
-          "ransom": 188
-        }
-      }
-    },
-    {
-      "id": "fam-aenjaris",
-      "name": "aenjaris",
-      "sample_count": 2810,
-      "mean_family_confidence": 0.8452,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 2810
-      },
-      "partitions": {
-        "Win32_test": 2810
-      },
-      "tags": {
-        "behavior": {
-          "dropper": 72
-        },
-        "file_property": {
-          "msil": 6
-        }
-      }
-    },
-    {
-      "id": "fam-neshta",
-      "name": "neshta",
-      "sample_count": 2534,
-      "mean_family_confidence": 0.8825,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 2468,
-        "Dot_Net": 34,
-        "Win64": 32
-      },
-      "partitions": {
-        "Win32_test": 2468,
-        "Dot_Net_test": 34,
-        "Win64_test": 32
-      },
-      "tags": {
-        "behavior": {
-          "virus": 2530,
-          "worm": 34,
-          "ransom": 2
-        }
-      }
-    },
-    {
-      "id": "fam-swisyn",
-      "name": "swisyn",
-      "sample_count": 2278,
-      "mean_family_confidence": 0.7684,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 2278
-      },
-      "partitions": {
-        "Win32_test": 2278
-      },
-      "tags": {
-        "behavior": {
-          "downloader": 12,
-          "worm": 8,
-          "passwordstealer": 2,
-          "dropper": 2,
-          "autorun": 2
-        },
-        "file_property": {
-          "vb": 468
-        },
-        "packer": {
-          "upx": 6
-        }
-      }
-    },
-    {
-      "id": "fam-upatre",
-      "name": "upatre",
-      "sample_count": 2078,
-      "mean_family_confidence": 0.8181,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 2078
-      },
-      "partitions": {
-        "Win32_test": 2078
-      },
-      "tags": {
-        "behavior": {
-          "downloader": 2054,
-          "selfdel": 20,
-          "cryptor": 8,
-          "injector": 2
-        },
-        "packer": {
-          "upx": 132,
-          "vmprotect": 2
-        }
-      }
-    },
-    {
-      "id": "fam-triusor",
-      "name": "triusor",
-      "sample_count": 1664,
-      "mean_family_confidence": 0.8726,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-13",
-      "file_types": {
-        "Win32": 1664
-      },
-      "partitions": {
-        "Win32_test": 1664
-      },
-      "tags": {
-        "behavior": {
-          "virus": 1664
-        }
-      }
-    },
-    {
-      "id": "fam-sality",
-      "name": "sality",
-      "sample_count": 1650,
-      "mean_family_confidence": 0.8423,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 1650
-      },
-      "partitions": {
-        "Win32_test": 1650
-      },
-      "tags": {
-        "behavior": {
-          "virus": 1630,
-          "worm": 6,
-          "dropper": 4
-        },
-        "file_property": {
-          "vb": 4,
-          "autoit": 2
-        },
-        "packer": {
-          "upx": 16,
-          "vmprotect": 2
-        },
-        "exploit": {
-          "cve_2017_0245": 2
-        }
-      }
-    },
-    {
-      "id": "fam-virut",
-      "name": "virut",
-      "sample_count": 1526,
-      "mean_family_confidence": 0.8163,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 1414,
-        "Win64": 90,
-        "Dot_Net": 22
-      },
-      "partitions": {
-        "Win32_test": 1414,
-        "Win64_test": 90,
-        "Dot_Net_test": 22
-      },
-      "tags": {
-        "behavior": {
-          "virus": 1316,
-          "worm": 18,
-          "coinminer": 10
-        },
-        "file_property": {
-          "vb": 4
-        },
-        "packer": {
-          "upx": 4
-        }
-      }
-    },
-    {
-      "id": "fam-emotet",
-      "name": "emotet",
-      "sample_count": 1188,
-      "mean_family_confidence": 0.8608,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 1086,
-        "Win64": 102
-      },
-      "partitions": {
-        "Win32_test": 1086,
-        "Win64_test": 102
-      },
-      "tags": {
-        "behavior": {
-          "banker": 270,
-          "backdoor": 104,
-          "ransom": 24,
-          "cryptor": 4,
-          "coinminer": 4
-        },
-        "packer": {
-          "upx": 2
-        }
-      }
-    },
-    {
-      "id": "fam-njrat",
-      "name": "njrat",
-      "sample_count": 1110,
-      "mean_family_confidence": 0.8179,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Dot_Net": 994,
-        "Win32": 84,
-        "Win64": 32
-      },
-      "partitions": {
-        "Dot_Net_test": 994,
-        "Win32_test": 84,
-        "Win64_test": 32
-      },
-      "tags": {
-        "behavior": {
-          "backdoor": 766,
-          "dropper": 38,
-          "binder": 26,
-          "autorun": 12,
-          "downloader": 6
-        },
-        "file_property": {
-          "msil": 1042,
-          "autoit": 4
-        },
-        "packer": {
-          "enigmaprotector": 12,
-          "themida": 8,
-          "vmprotect": 4
-        }
-      }
-    },
-    {
-      "id": "fam-lummastealer",
-      "name": "lummastealer",
-      "sample_count": 1032,
-      "mean_family_confidence": 0.7861,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 952,
-        "Dot_Net": 42,
-        "Win64": 38
-      },
-      "partitions": {
-        "Win32_test": 952,
-        "Dot_Net_test": 42,
-        "Win64_test": 38
-      },
-      "tags": {
-        "behavior": {
-          "spyware": 336,
-          "passwordstealer": 166,
-          "dropper": 110,
-          "downloader": 8,
-          "stealer": 8
-        },
-        "file_property": {
-          "msil": 48,
-          "powershell": 2
-        },
-        "packer": {
-          "themida": 268,
-          "vmprotect": 6,
-          "nsis": 4,
-          "enigmaprotector": 4,
-          "mpress": 2
-        }
-      }
-    },
-    {
-      "id": "fam-glupteba",
-      "name": "glupteba",
-      "sample_count": 940,
-      "mean_family_confidence": 0.7646,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 940
-      },
-      "partitions": {
-        "Win32_test": 940
-      },
-      "tags": {
-        "behavior": {
-          "selfmod": 58,
-          "packed": 58,
-          "injector": 2,
-          "cryptor": 2
-        },
-        "file_property": {
-          "codecpack": 418
-        }
-      }
-    },
-    {
-      "id": "fam-trickbot",
-      "name": "trickbot",
-      "sample_count": 864,
-      "mean_family_confidence": 0.7535,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 864
-      },
-      "partitions": {
-        "Win32_test": 864
-      },
-      "tags": {
-        "behavior": {
-          "coinminer": 28,
-          "injector": 4,
-          "banker": 2
-        }
-      }
-    },
-    {
-      "id": "fam-clipbanker",
-      "name": "clipbanker",
-      "sample_count": 861,
-      "mean_family_confidence": 0.7961,
-      "first_seen": "2024-04-01",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Dot_Net": 684,
-        "Win32": 106,
-        "Win64": 71
-      },
-      "partitions": {
-        "Dot_Net_test": 684,
-        "Win32_test": 106,
-        "Win64_test": 68,
-        "challenge": 3
-      },
-      "tags": {
-        "behavior": {
-          "banker": 145,
-          "spyware": 12,
-          "passwordstealer": 2
-        },
-        "file_property": {
-          "msil": 690,
-          "python": 6
-        },
-        "packer": {
-          "themida": 6,
-          "vmprotect": 6
-        }
-      }
-    },
-    {
-      "id": "fam-mabezat",
-      "name": "mabezat",
-      "sample_count": 754,
-      "mean_family_confidence": 0.8977,
-      "first_seen": "2024-09-27",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 754
-      },
-      "partitions": {
-        "Win32_test": 754
-      },
-      "tags": {
-        "behavior": {
-          "worm": 738,
-          "virus": 574
-        },
-        "packer": {
-          "upx": 6
-        }
-      }
-    },
-    {
-      "id": "fam-stealc",
-      "name": "stealc",
-      "sample_count": 752,
-      "mean_family_confidence": 0.7569,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 750,
-        "Dot_Net": 2
-      },
-      "partitions": {
-        "Win32_test": 750,
-        "Dot_Net_test": 2
-      },
-      "tags": {
-        "behavior": {
-          "coinminer": 198,
-          "stealer": 120,
-          "passwordstealer": 20,
-          "cryptor": 10,
-          "downloader": 2
-        },
-        "file_property": {
-          "msil": 2
-        },
-        "packer": {
-          "themida": 676,
-          "vmprotect": 4
-        }
-      }
-    },
-    {
-      "id": "fam-nitol",
-      "name": "nitol",
-      "sample_count": 738,
-      "mean_family_confidence": 0.8456,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 738
-      },
-      "partitions": {
-        "Win32_test": 738
-      },
-      "tags": {
-        "behavior": {
-          "servstart": 422,
-          "ddos": 214,
-          "backdoor": 2
-        },
-        "packer": {
-          "upx": 14,
-          "vmprotect": 12
-        }
-      }
-    },
-    {
-      "id": "fam-ramnit",
-      "name": "ramnit",
-      "sample_count": 706,
-      "mean_family_confidence": 0.8692,
-      "first_seen": "2024-09-23",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 706
-      },
-      "partitions": {
-        "Win32_test": 706
-      },
-      "tags": {
-        "behavior": {
-          "virus": 680,
-          "worm": 6,
-          "backdoor": 6
-        },
-        "file_property": {
-          "vbs": 2
-        },
-        "packer": {
-          "upx": 22
+          "backdoor": 37225,
+          "spyware": 4247,
+          "proxy": 2558,
+          "cryptor": 5,
+          "downloader": 3
         }
       }
     },
     {
       "id": "fam-xmrig",
       "name": "xmrig",
-      "sample_count": 640,
-      "mean_family_confidence": 0.8006,
-      "first_seen": "2024-09-22",
+      "sample_count": 17708,
+      "mean_family_confidence": 0.8224,
+      "first_seen": "2023-09-24",
       "last_seen": "2024-12-13",
       "file_types": {
-        "Win64": 630,
-        "Win32": 10
+        "Win64": 17699,
+        "Win32": 5,
+        "Dot_Net": 4
       },
       "partitions": {
-        "Win64_test": 630,
-        "Win32_test": 10
+        "Win64_train": 17384,
+        "Win64_test": 315,
+        "Win32_test": 5,
+        "Dot_Net_train": 4
       },
       "tags": {
         "behavior": {
-          "coinminer": 624,
-          "riskware": 14,
-          "pua": 12
+          "coinminer": 17674,
+          "riskware": 30,
+          "pua": 16
+        },
+        "file_property": {
+          "msil": 4
+        },
+        "packer": {
+          "vmprotect": 3,
+          "themida": 2
         },
         "group": {
-          "apt28": 4
+          "apt28": 12
         }
       }
     },
     {
-      "id": "fam-qqrob",
-      "name": "qqrob",
-      "sample_count": 569,
-      "mean_family_confidence": 0.8483,
-      "first_seen": "2023-10-15",
+      "id": "fam-cosmu",
+      "name": "cosmu",
+      "sample_count": 7224,
+      "mean_family_confidence": 0.8167,
+      "first_seen": "2023-10-10",
       "last_seen": "2024-12-14",
       "file_types": {
-        "Win32": 555,
-        "Dot_Net": 14
+        "Win32": 4578,
+        "Win64": 2645,
+        "Dot_Net": 1
       },
       "partitions": {
-        "Win32_test": 554,
-        "Dot_Net_test": 14,
+        "Win32_test": 4578,
+        "Win64_train": 2184,
+        "Win64_test": 461,
+        "Dot_Net_train": 1
+      },
+      "tags": {
+        "behavior": {
+          "encoder": 243,
+          "ransom": 192,
+          "downloader": 34,
+          "fakealert": 33,
+          "worm": 24
+        },
+        "file_property": {
+          "vb": 17,
+          "msil": 1
+        },
+        "packer": {
+          "nsis": 126,
+          "upx": 5
+        },
+        "group": {
+          "gamaredon": 657
+        }
+      }
+    },
+    {
+      "id": "fam-njrat",
+      "name": "njrat",
+      "sample_count": 2964,
+      "mean_family_confidence": 0.8252,
+      "first_seen": "2023-09-24",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Dot_Net": 2863,
+        "Win64": 59,
+        "Win32": 42
+      },
+      "partitions": {
+        "Dot_Net_train": 2366,
+        "Dot_Net_test": 497,
+        "Win64_train": 43,
+        "Win32_test": 42,
+        "Win64_test": 16
+      },
+      "tags": {
+        "behavior": {
+          "backdoor": 1962,
+          "dropper": 114,
+          "binder": 65,
+          "downloader": 24,
+          "spyware": 22
+        },
+        "file_property": {
+          "msil": 2869,
+          "autoit": 2,
+          "python": 1
+        },
+        "packer": {
+          "enigmaprotector": 10,
+          "themida": 8,
+          "vmprotect": 6,
+          "ppp": 3,
+          "mpress": 1
+        },
+        "group": {
+          "ta8": 1
+        }
+      }
+    },
+    {
+      "id": "fam-floxif",
+      "name": "floxif",
+      "sample_count": 2654,
+      "mean_family_confidence": 0.8568,
+      "first_seen": "2023-10-22",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 2642,
+        "Win64": 12
+      },
+      "partitions": {
+        "Win32_test": 2642,
+        "Win64_train": 11,
+        "Win64_test": 1
+      },
+      "tags": {
+        "behavior": {
+          "virus": 2398,
+          "worm": 3,
+          "antiav": 1,
+          "backdoor": 1
+        },
+        "packer": {
+          "upx": 296
+        },
+        "exploit": {
+          "cve_2018_8120": 7,
+          "cve_2010_0232": 1
+        }
+      }
+    },
+    {
+      "id": "fam-virlock",
+      "name": "virlock",
+      "sample_count": 2513,
+      "mean_family_confidence": 0.8577,
+      "first_seen": "2023-09-24",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 2212,
+        "Dot_Net": 299,
+        "Win64": 2
+      },
+      "partitions": {
+        "Win32_test": 2212,
+        "Dot_Net_train": 299,
+        "Win64_train": 2
+      },
+      "tags": {
+        "behavior": {
+          "virus": 2108,
+          "ransom": 307,
+          "downloader": 2
+        },
+        "file_property": {
+          "msil": 298
+        }
+      }
+    },
+    {
+      "id": "fam-strelastealer",
+      "name": "strelastealer",
+      "sample_count": 2301,
+      "mean_family_confidence": 0.784,
+      "first_seen": "2023-10-23",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win64": 2301
+      },
+      "partitions": {
+        "Win64_train": 2233,
+        "Win64_test": 68
+      },
+      "tags": {
+        "behavior": {
+          "passwordstealer": 1177,
+          "stealer": 798
+        }
+      }
+    },
+    {
+      "id": "fam-agenttesla",
+      "name": "agenttesla",
+      "sample_count": 2009,
+      "mean_family_confidence": 0.7784,
+      "first_seen": "2023-09-24",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Dot_Net": 1979,
+        "Win32": 22,
+        "Win64": 8
+      },
+      "partitions": {
+        "Dot_Net_train": 1865,
+        "Dot_Net_test": 114,
+        "Win32_test": 22,
+        "Win64_train": 7,
+        "Win64_test": 1
+      },
+      "tags": {
+        "behavior": {
+          "spyware": 208,
+          "passwordstealer": 189,
+          "downloader": 57,
+          "stealer": 16,
+          "cryptor": 9
+        },
+        "file_property": {
+          "msil": 1979,
+          "autoit": 13
+        },
+        "packer": {
+          "fsg": 6,
+          "themida": 4
+        },
+        "group": {
+          "turla": 1
+        }
+      }
+    },
+    {
+      "id": "fam-bedep",
+      "name": "bedep",
+      "sample_count": 1483,
+      "mean_family_confidence": 0.8217,
+      "first_seen": "2023-09-24",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Dot_Net": 882,
+        "Win64": 574,
+        "Win32": 27
+      },
+      "partitions": {
+        "Dot_Net_train": 716,
+        "Win64_train": 524,
+        "Dot_Net_test": 166,
+        "Win64_test": 49,
+        "Win32_test": 27,
         "challenge": 1
       },
       "tags": {
         "behavior": {
-          "passwordstealer": 456,
-          "stealer": 10,
-          "worm": 2
+          "downloader": 63,
+          "backdoor": 57,
+          "coinminer": 6,
+          "remoteshell": 4,
+          "injector": 2
         },
         "file_property": {
-          "msil": 14
+          "msil": 729,
+          "powershell": 3,
+          "python": 3
         },
         "packer": {
-          "upx": 156
+          "vmprotect": 1,
+          "enigmaprotector": 1
         }
       }
     },
     {
-      "id": "fam-zeus",
-      "name": "zeus",
-      "sample_count": 554,
-      "mean_family_confidence": 0.8364,
-      "first_seen": "2024-09-22",
+      "id": "fam-neshta",
+      "name": "neshta",
+      "sample_count": 1424,
+      "mean_family_confidence": 0.8785,
+      "first_seen": "2023-09-24",
       "last_seen": "2024-12-14",
       "file_types": {
-        "Win32": 526,
-        "Dot_Net": 26,
-        "Win64": 2
+        "Win32": 1234,
+        "Win64": 112,
+        "Dot_Net": 78
       },
       "partitions": {
-        "Win32_test": 526,
-        "Dot_Net_test": 26,
-        "Win64_test": 2
+        "Win32_test": 1234,
+        "Win64_train": 96,
+        "Dot_Net_train": 61,
+        "Dot_Net_test": 17,
+        "Win64_test": 16
       },
       "tags": {
         "behavior": {
-          "spyware": 412,
-          "injector": 56,
-          "passwordstealer": 32,
-          "backdoor": 20,
-          "dropper": 16
+          "virus": 1401,
+          "worm": 17,
+          "binder": 2,
+          "injector": 1,
+          "dropper": 1
         },
         "file_property": {
-          "msil": 26,
+          "msil": 5
+        }
+      }
+    },
+    {
+      "id": "fam-aenjaris",
+      "name": "aenjaris",
+      "sample_count": 1405,
+      "mean_family_confidence": 0.8452,
+      "first_seen": "2024-09-22",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 1405
+      },
+      "partitions": {
+        "Win32_test": 1405
+      },
+      "tags": {
+        "behavior": {
+          "dropper": 36
+        },
+        "file_property": {
+          "msil": 3
+        }
+      }
+    },
+    {
+      "id": "fam-swisyn",
+      "name": "swisyn",
+      "sample_count": 1140,
+      "mean_family_confidence": 0.7685,
+      "first_seen": "2023-11-16",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 1139,
+        "Win64": 1
+      },
+      "partitions": {
+        "Win32_test": 1139,
+        "Win64_train": 1
+      },
+      "tags": {
+        "behavior": {
+          "downloader": 6,
+          "worm": 4,
+          "passwordstealer": 1,
+          "dropper": 1,
+          "autorun": 1
+        },
+        "file_property": {
+          "vb": 234
+        },
+        "packer": {
+          "upx": 3
+        }
+      }
+    },
+    {
+      "id": "fam-redline",
+      "name": "redline",
+      "sample_count": 1088,
+      "mean_family_confidence": 0.8115,
+      "first_seen": "2023-09-24",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Dot_Net": 957,
+        "Win64": 100,
+        "Win32": 31
+      },
+      "partitions": {
+        "Dot_Net_train": 759,
+        "Dot_Net_test": 198,
+        "Win64_train": 87,
+        "Win32_test": 31,
+        "Win64_test": 13
+      },
+      "tags": {
+        "behavior": {
+          "spyware": 769,
+          "stealer": 227,
+          "passwordstealer": 178,
+          "coinminer": 7,
+          "downloader": 3
+        },
+        "file_property": {
+          "msil": 997,
+          "autoit": 1
+        },
+        "packer": {
+          "themida": 3,
+          "obsidium": 2,
+          "vmprotect": 1
+        },
+        "group": {
+          "turla": 1
+        }
+      }
+    },
+    {
+      "id": "fam-virut",
+      "name": "virut",
+      "sample_count": 1082,
+      "mean_family_confidence": 0.8267,
+      "first_seen": "2023-09-25",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 707,
+        "Win64": 279,
+        "Dot_Net": 96
+      },
+      "partitions": {
+        "Win32_test": 707,
+        "Win64_train": 234,
+        "Dot_Net_train": 85,
+        "Win64_test": 45,
+        "Dot_Net_test": 11
+      },
+      "tags": {
+        "behavior": {
+          "virus": 965,
+          "worm": 9,
+          "coinminer": 5
+        },
+        "file_property": {
           "vb": 2
-        },
-        "packer": {
-          "upx": 2,
-          "mystic": 2,
-          "vmprotect": 2
-        }
-      }
-    },
-    {
-      "id": "fam-stormattack",
-      "name": "stormattack",
-      "sample_count": 542,
-      "mean_family_confidence": 0.8734,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 542
-      },
-      "partitions": {
-        "Win32_test": 542
-      },
-      "tags": {
-        "behavior": {
-          "ddos": 502,
-          "dropper": 444,
-          "downloader": 2
         },
         "packer": {
           "upx": 2
@@ -746,181 +543,37 @@
       }
     },
     {
-      "id": "fam-jeefo",
-      "name": "jeefo",
-      "sample_count": 534,
-      "mean_family_confidence": 0.8765,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 532,
-        "Dot_Net": 2
-      },
-      "partitions": {
-        "Win32_test": 532,
-        "Dot_Net_test": 2
-      },
-      "tags": {
-        "behavior": {
-          "virus": 534
-        }
-      }
-    },
-    {
-      "id": "fam-urelas",
-      "name": "urelas",
-      "sample_count": 513,
-      "mean_family_confidence": 0.8492,
-      "first_seen": "2024-03-23",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 513
-      },
-      "partitions": {
-        "Win32_test": 512,
-        "challenge": 1
-      },
-      "tags": {
-        "behavior": {
-          "backdoor": 355,
-          "rootkit": 12,
-          "downloader": 2
-        },
-        "packer": {
-          "upx": 8
-        }
-      }
-    },
-    {
-      "id": "fam-amadey",
-      "name": "amadey",
-      "sample_count": 498,
-      "mean_family_confidence": 0.7869,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 480,
-        "Win64": 10,
-        "Dot_Net": 8
-      },
-      "partitions": {
-        "Win32_test": 480,
-        "Win64_test": 10,
-        "Dot_Net_test": 8
-      },
-      "tags": {
-        "behavior": {
-          "downloader": 218,
-          "stealer": 10,
-          "spyware": 8,
-          "passwordstealer": 6,
-          "disabler": 4
-        },
-        "file_property": {
-          "msil": 14
-        },
-        "packer": {
-          "themida": 306,
-          "vmprotect": 4
-        }
-      }
-    },
-    {
-      "id": "fam-bedep",
-      "name": "bedep",
-      "sample_count": 485,
-      "mean_family_confidence": 0.813,
-      "first_seen": "2024-03-12",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Dot_Net": 332,
-        "Win64": 99,
-        "Win32": 54
-      },
-      "partitions": {
-        "Dot_Net_test": 332,
-        "Win64_test": 98,
-        "Win32_test": 54,
-        "challenge": 1
-      },
-      "tags": {
-        "behavior": {
-          "downloader": 20,
-          "backdoor": 16,
-          "stealer": 2,
-          "worm": 2,
-          "remoteshell": 2
-        },
-        "file_property": {
-          "msil": 264
-        }
-      }
-    },
-    {
-      "id": "fam-redline",
-      "name": "redline",
-      "sample_count": 484,
-      "mean_family_confidence": 0.7996,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Dot_Net": 396,
-        "Win32": 62,
-        "Win64": 26
-      },
-      "partitions": {
-        "Dot_Net_test": 396,
-        "Win32_test": 62,
-        "Win64_test": 26
-      },
-      "tags": {
-        "behavior": {
-          "spyware": 294,
-          "stealer": 104,
-          "passwordstealer": 56,
-          "downloader": 2,
-          "coinminer": 2
-        },
-        "file_property": {
-          "msil": 374,
-          "autoit": 2
-        },
-        "packer": {
-          "themida": 6,
-          "obsidium": 4,
-          "vmprotect": 2
-        }
-      }
-    },
-    {
       "id": "fam-heracles",
       "name": "heracles",
-      "sample_count": 452,
-      "mean_family_confidence": 0.7637,
-      "first_seen": "2023-09-26",
+      "sample_count": 1063,
+      "mean_family_confidence": 0.755,
+      "first_seen": "2023-09-24",
       "last_seen": "2024-12-13",
       "file_types": {
-        "Dot_Net": 440,
-        "Win32": 6,
-        "Win64": 6
+        "Dot_Net": 1047,
+        "Win64": 13,
+        "Win32": 3
       },
       "partitions": {
-        "Dot_Net_test": 414,
+        "Dot_Net_train": 814,
+        "Dot_Net_test": 207,
         "challenge": 26,
-        "Win32_test": 6,
-        "Win64_test": 6
+        "Win64_train": 10,
+        "Win32_test": 3,
+        "Win64_test": 3
       },
       "tags": {
         "behavior": {
-          "webshell": 42,
-          "backdoor": 40,
-          "remoteshell": 36,
-          "injector": 8,
-          "spyware": 6
+          "webshell": 234,
+          "backdoor": 233,
+          "remoteshell": 90,
+          "injector": 18,
+          "gamehack": 16
         },
         "file_property": {
-          "msil": 162,
-          "shellcode": 2
+          "msil": 545,
+          "shellcode": 1,
+          "powershell": 1
         },
         "group": {
           "turla": 2
@@ -928,726 +581,1290 @@
       }
     },
     {
-      "id": "fam-dinwod",
-      "name": "dinwod",
-      "sample_count": 432,
-      "mean_family_confidence": 0.8615,
-      "first_seen": "2024-09-22",
+      "id": "fam-upatre",
+      "name": "upatre",
+      "sample_count": 1043,
+      "mean_family_confidence": 0.8179,
+      "first_seen": "2023-10-30",
       "last_seen": "2024-12-14",
       "file_types": {
-        "Win32": 432
+        "Win32": 1039,
+        "Win64": 4
       },
       "partitions": {
-        "Win32_test": 432
+        "Win32_test": 1039,
+        "Win64_train": 4
       },
       "tags": {
         "behavior": {
-          "dropper": 432
+          "downloader": 1031,
+          "selfdel": 10,
+          "cryptor": 4,
+          "injector": 1
         },
         "packer": {
-          "upx": 136,
-          "vmprotect": 6
+          "upx": 66,
+          "vmprotect": 1
         }
       }
     },
     {
-      "id": "fam-puce",
-      "name": "puce",
-      "sample_count": 424,
-      "mean_family_confidence": 0.8517,
-      "first_seen": "2024-09-22",
+      "id": "fam-clipbanker",
+      "name": "clipbanker",
+      "sample_count": 1013,
+      "mean_family_confidence": 0.7925,
+      "first_seen": "2023-09-24",
       "last_seen": "2024-12-14",
       "file_types": {
-        "Win32": 424
+        "Dot_Net": 829,
+        "Win64": 131,
+        "Win32": 53
       },
       "partitions": {
-        "Win32_test": 424
-      },
-      "tags": {
-        "behavior": {
-          "virus": 424
-        }
-      }
-    },
-    {
-      "id": "fam-ekstak",
-      "name": "ekstak",
-      "sample_count": 420,
-      "mean_family_confidence": 0.7806,
-      "first_seen": "2024-09-24",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 420
-      },
-      "partitions": {
-        "Win32_test": 420
-      },
-      "tags": {
-        "behavior": {
-          "adware": 16,
-          "dropper": 6
-        },
-        "packer": {
-          "nsis": 2
-        }
-      }
-    },
-    {
-      "id": "fam-lolbot",
-      "name": "lolbot",
-      "sample_count": 420,
-      "mean_family_confidence": 0.8275,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-13",
-      "file_types": {
-        "Win32": 420
-      },
-      "partitions": {
-        "Win32_test": 420
-      },
-      "tags": {
-        "behavior": {
-          "backdoor": 404,
-          "worm": 392
-        }
-      }
-    },
-    {
-      "id": "fam-zegost",
-      "name": "zegost",
-      "sample_count": 411,
-      "mean_family_confidence": 0.7987,
-      "first_seen": "2024-04-02",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 389,
-        "Win64": 22
-      },
-      "partitions": {
-        "Win32_test": 388,
-        "Win64_test": 22,
-        "challenge": 1
-      },
-      "tags": {
-        "behavior": {
-          "backdoor": 288,
-          "downloader": 54,
-          "dropper": 20,
-          "spyware": 8,
-          "injector": 6
-        },
-        "packer": {
-          "vmprotect": 10,
-          "upx": 2,
-          "nspm": 2
-        }
-      }
-    },
-    {
-      "id": "fam-blihan",
-      "name": "blihan",
-      "sample_count": 398,
-      "mean_family_confidence": 0.8417,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 398
-      },
-      "partitions": {
-        "Win32_test": 398
-      },
-      "tags": {
-        "behavior": {
-          "dropper": 32,
-          "backdoor": 6
-        }
-      }
-    },
-    {
-      "id": "fam-offloader",
-      "name": "offloader",
-      "sample_count": 394,
-      "mean_family_confidence": 0.7737,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 394
-      },
-      "partitions": {
-        "Win32_test": 394
-      },
-      "tags": {
-        "behavior": {
-          "downloader": 394
-        },
-        "packer": {
-          "nsis": 382
-        }
-      }
-    },
-    {
-      "id": "fam-juched",
-      "name": "juched",
-      "sample_count": 378,
-      "mean_family_confidence": 0.8316,
-      "first_seen": "2024-09-23",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 378
-      },
-      "partitions": {
-        "Win32_test": 378
-      },
-      "tags": {
-        "behavior": {
-          "worm": 376,
-          "dropper": 2,
-          "downloader": 2
-        },
-        "packer": {
-          "mpress": 8,
-          "upx": 6
-        }
-      }
-    },
-    {
-      "id": "fam-neoreklami",
-      "name": "neoreklami",
-      "sample_count": 376,
-      "mean_family_confidence": 0.8156,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 374,
-        "Win64": 2
-      },
-      "partitions": {
-        "Win32_test": 374,
-        "Win64_test": 2
-      },
-      "tags": {
-        "behavior": {
-          "adware": 360,
-          "pua": 54
-        }
-      }
-    },
-    {
-      "id": "fam-jalapeno",
-      "name": "jalapeno",
-      "sample_count": 368,
-      "mean_family_confidence": 0.7441,
-      "first_seen": "2023-10-25",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Dot_Net": 335,
-        "Win32": 25,
-        "Win64": 8
-      },
-      "partitions": {
-        "Dot_Net_test": 324,
-        "Win32_test": 20,
-        "challenge": 16,
-        "Win64_test": 8
-      },
-      "tags": {
-        "behavior": {
-          "backdoor": 106,
-          "webshell": 104,
-          "downloader": 22,
-          "cryptor": 16,
-          "dropper": 14
-        },
-        "file_property": {
-          "msil": 302
-        },
-        "packer": {
-          "vmprotect": 22
-        },
-        "group": {
-          "turla": 4
-        }
-      }
-    },
-    {
-      "id": "fam-packz",
-      "name": "packz",
-      "sample_count": 350,
-      "mean_family_confidence": 0.7914,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 350
-      },
-      "partitions": {
-        "Win32_test": 350
-      },
-      "tags": {
-        "behavior": {
-          "downloader": 348,
-          "injector": 326,
-          "spyware": 4
-        },
-        "file_property": {
-          "codecpack": 8
-        },
-        "packer": {
-          "upx": 346
-        }
-      }
-    },
-    {
-      "id": "fam-vilsel",
-      "name": "vilsel",
-      "sample_count": 328,
-      "mean_family_confidence": 0.8414,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 328
-      },
-      "partitions": {
-        "Win32_test": 328
-      },
-      "tags": {
-        "behavior": {
-          "downloader": 40,
-          "dropper": 4,
-          "worm": 4,
-          "autorun": 2
-        },
-        "file_property": {
-          "vb": 280
-        },
-        "packer": {
-          "upx": 110
-        }
-      }
-    },
-    {
-      "id": "fam-vbclone",
-      "name": "vbclone",
-      "sample_count": 314,
-      "mean_family_confidence": 0.8157,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 314
-      },
-      "partitions": {
-        "Win32_test": 314
-      },
-      "tags": {
-        "behavior": {
-          "dropper": 12,
-          "worm": 8
-        },
-        "file_property": {
-          "vb": 162
-        }
-      }
-    },
-    {
-      "id": "fam-mofksys",
-      "name": "mofksys",
-      "sample_count": 306,
-      "mean_family_confidence": 0.7407,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 306
-      },
-      "partitions": {
-        "Win32_test": 306
-      },
-      "tags": {
-        "behavior": {
-          "worm": 292,
-          "virus": 92
-        },
-        "file_property": {
-          "vb": 292
-        },
-        "packer": {
-          "enigmaprotector": 2
-        }
-      }
-    },
-    {
-      "id": "fam-quasar",
-      "name": "quasar",
-      "sample_count": 276,
-      "mean_family_confidence": 0.7991,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-13",
-      "file_types": {
-        "Dot_Net": 222,
-        "Win64": 34,
-        "Win32": 20
-      },
-      "partitions": {
-        "Dot_Net_test": 222,
+        "Dot_Net_train": 487,
+        "Dot_Net_test": 342,
+        "Win64_train": 94,
+        "Win32_test": 53,
         "Win64_test": 34,
-        "Win32_test": 20
+        "challenge": 3
       },
       "tags": {
         "behavior": {
-          "backdoor": 184,
-          "spyware": 18,
-          "dropper": 4,
-          "injector": 4,
-          "downloader": 2
+          "banker": 216,
+          "spyware": 10,
+          "coinminer": 2,
+          "dropper": 2,
+          "passwordstealer": 1
         },
         "file_property": {
-          "msil": 248
+          "msil": 828,
+          "python": 3
         },
         "packer": {
-          "themida": 4,
-          "enigmaprotector": 4
+          "themida": 5,
+          "vmprotect": 5
         }
       }
     },
     {
-      "id": "fam-agenttesla",
-      "name": "agenttesla",
-      "sample_count": 274,
-      "mean_family_confidence": 0.7695,
+      "id": "fam-triusor",
+      "name": "triusor",
+      "sample_count": 832,
+      "mean_family_confidence": 0.8726,
       "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
+      "last_seen": "2024-12-13",
       "file_types": {
-        "Dot_Net": 228,
-        "Win32": 44,
-        "Win64": 2
+        "Win32": 832
       },
       "partitions": {
-        "Dot_Net_test": 228,
-        "Win32_test": 44,
-        "Win64_test": 2
+        "Win32_test": 832
       },
       "tags": {
         "behavior": {
-          "passwordstealer": 48,
-          "spyware": 34,
-          "downloader": 22,
-          "injector": 8,
-          "stealer": 4
+          "virus": 832
+        }
+      }
+    },
+    {
+      "id": "fam-sality",
+      "name": "sality",
+      "sample_count": 831,
+      "mean_family_confidence": 0.8423,
+      "first_seen": "2023-09-28",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 825,
+        "Dot_Net": 6
+      },
+      "partitions": {
+        "Win32_test": 825,
+        "Dot_Net_train": 6
+      },
+      "tags": {
+        "behavior": {
+          "virus": 821,
+          "worm": 3,
+          "dropper": 2
         },
         "file_property": {
-          "msil": 234,
-          "autoit": 26
+          "vb": 2,
+          "autoit": 1
         },
         "packer": {
-          "themida": 6
-        }
-      }
-    },
-    {
-      "id": "fam-diple",
-      "name": "diple",
-      "sample_count": 268,
-      "mean_family_confidence": 0.7765,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 266,
-        "Win64": 2
-      },
-      "partitions": {
-        "Win32_test": 266,
-        "Win64_test": 2
-      },
-      "tags": {
-        "packer": {
-          "themida": 2
-        }
-      }
-    },
-    {
-      "id": "fam-pincav",
-      "name": "pincav",
-      "sample_count": 252,
-      "mean_family_confidence": 0.7943,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 252
-      },
-      "partitions": {
-        "Win32_test": 252
-      },
-      "tags": {
-        "behavior": {
-          "downloader": 242,
-          "dropper": 70,
-          "injector": 2
-        },
-        "packer": {
-          "upx": 2
-        }
-      }
-    },
-    {
-      "id": "fam-remcos",
-      "name": "remcos",
-      "sample_count": 246,
-      "mean_family_confidence": 0.8213,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 176,
-        "Dot_Net": 50,
-        "Win64": 20
-      },
-      "partitions": {
-        "Win32_test": 176,
-        "Dot_Net_test": 50,
-        "Win64_test": 20
-      },
-      "tags": {
-        "behavior": {
-          "backdoor": 142,
-          "downloader": 8,
-          "injector": 2,
-          "runner": 2
-        },
-        "file_property": {
-          "msil": 50,
-          "autoit": 16
-        },
-        "packer": {
-          "themida": 4,
-          "nsis": 4,
-          "upx": 4,
-          "mpress": 2
-        }
-      }
-    },
-    {
-      "id": "fam-wannacry",
-      "name": "wannacry",
-      "sample_count": 244,
-      "mean_family_confidence": 0.8254,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 244
-      },
-      "partitions": {
-        "Win32_test": 244
-      },
-      "tags": {
-        "behavior": {
-          "ransom": 242,
-          "exploit": 94,
-          "virus": 2
+          "upx": 8,
+          "vmprotect": 1
         },
         "exploit": {
-          "cve_2017_0147": 174
-        },
-        "group": {
-          "equationgroup": 10
-        }
-      }
-    },
-    {
-      "id": "fam-ribaj",
-      "name": "ribaj",
-      "sample_count": 240,
-      "mean_family_confidence": 0.8293,
-      "first_seen": "2024-09-23",
-      "last_seen": "2024-12-07",
-      "file_types": {
-        "Dot_Net": 240
-      },
-      "partitions": {
-        "Dot_Net_test": 240
-      },
-      "tags": {
-        "behavior": {
-          "virus": 240
-        },
-        "file_property": {
-          "msil": 240
-        }
-      }
-    },
-    {
-      "id": "fam-soltern",
-      "name": "soltern",
-      "sample_count": 228,
-      "mean_family_confidence": 0.8611,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 228
-      },
-      "partitions": {
-        "Win32_test": 228
-      },
-      "tags": {
-        "behavior": {
-          "worm": 224,
-          "virus": 4
-        },
-        "packer": {
-          "upx": 16
+          "cve_2017_0245": 1
         }
       }
     },
     {
       "id": "fam-cobaltstrike",
       "name": "cobaltstrike",
-      "sample_count": 227,
-      "mean_family_confidence": 0.7839,
-      "first_seen": "2024-08-31",
+      "sample_count": 784,
+      "mean_family_confidence": 0.8052,
+      "first_seen": "2023-09-24",
       "last_seen": "2024-12-14",
       "file_types": {
-        "Win64": 193,
-        "Win32": 30,
-        "Dot_Net": 4
+        "Win64": 748,
+        "Dot_Net": 21,
+        "Win32": 15
       },
       "partitions": {
-        "Win64_test": 192,
-        "Win32_test": 30,
-        "Dot_Net_test": 4,
+        "Win64_train": 651,
+        "Win64_test": 96,
+        "Dot_Net_train": 19,
+        "Win32_test": 15,
+        "Dot_Net_test": 2,
         "challenge": 1
       },
       "tags": {
         "behavior": {
-          "backdoor": 74,
-          "injector": 14,
-          "remoteshell": 12,
-          "downloader": 4,
-          "dropper": 2
+          "backdoor": 249,
+          "riskware": 18,
+          "remoteshell": 16,
+          "injector": 15,
+          "downloader": 13
         },
         "file_property": {
-          "msil": 4
+          "msil": 12
         },
         "packer": {
-          "vmprotect": 2
+          "vmprotect": 13,
+          "themida": 3
+        },
+        "exploit": {
+          "cve_2021_40449": 1
+        },
+        "group": {
+          "equationgroup": 1
         }
       }
     },
     {
-      "id": "fam-mydoom",
-      "name": "mydoom",
-      "sample_count": 220,
-      "mean_family_confidence": 0.8678,
-      "first_seen": "2024-09-22",
-      "last_seen": "2024-12-14",
+      "id": "fam-quasar",
+      "name": "quasar",
+      "sample_count": 660,
+      "mean_family_confidence": 0.8211,
+      "first_seen": "2023-09-24",
+      "last_seen": "2024-12-13",
       "file_types": {
-        "Win32": 220
+        "Dot_Net": 603,
+        "Win64": 47,
+        "Win32": 10
       },
       "partitions": {
-        "Win32_test": 220
+        "Dot_Net_train": 492,
+        "Dot_Net_test": 111,
+        "Win64_train": 30,
+        "Win64_test": 17,
+        "Win32_test": 10
       },
       "tags": {
         "behavior": {
-          "worm": 116,
-          "dropper": 38,
-          "downloader": 30,
-          "autorun": 30,
-          "email": 26
+          "backdoor": 524,
+          "spyware": 31,
+          "downloader": 5,
+          "dropper": 3,
+          "injector": 2
+        },
+        "file_property": {
+          "msil": 616,
+          "shellcode": 1,
+          "autoit": 1
         },
         "packer": {
-          "upx": 104
+          "themida": 4,
+          "enigmaprotector": 3
         }
       }
     },
     {
-      "id": "fam-fragtor",
-      "name": "fragtor",
-      "sample_count": 218,
-      "mean_family_confidence": 0.7645,
-      "first_seen": "2023-10-12",
+      "id": "fam-emotet",
+      "name": "emotet",
+      "sample_count": 630,
+      "mean_family_confidence": 0.8604,
+      "first_seen": "2023-10-02",
       "last_seen": "2024-12-14",
       "file_types": {
-        "Win32": 217,
-        "APK": 1
+        "Win32": 543,
+        "Win64": 87
       },
       "partitions": {
-        "Win32_test": 184,
-        "challenge": 34
+        "Win32_test": 543,
+        "Win64_test": 51,
+        "Win64_train": 36
       },
       "tags": {
         "behavior": {
-          "gamehack": 12,
-          "hacktool": 10,
-          "injector": 8,
-          "remoteshell": 2,
-          "dllhijack": 2
-        },
-        "file_property": {
-          "codecpack": 26
+          "banker": 145,
+          "backdoor": 52,
+          "ransom": 12,
+          "cryptor": 2,
+          "coinminer": 2
         },
         "packer": {
-          "upx": 28,
           "themida": 2,
+          "upx": 1
+        }
+      }
+    },
+    {
+      "id": "fam-lummastealer",
+      "name": "lummastealer",
+      "sample_count": 627,
+      "mean_family_confidence": 0.7829,
+      "first_seen": "2023-10-22",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 476,
+        "Dot_Net": 113,
+        "Win64": 38
+      },
+      "partitions": {
+        "Win32_test": 476,
+        "Dot_Net_train": 92,
+        "Dot_Net_test": 21,
+        "Win64_test": 19,
+        "Win64_train": 19
+      },
+      "tags": {
+        "behavior": {
+          "spyware": 178,
+          "passwordstealer": 96,
+          "dropper": 59,
+          "stealer": 7,
+          "downloader": 6
+        },
+        "file_property": {
+          "msil": 114,
+          "powershell": 1
+        },
+        "packer": {
+          "themida": 134,
+          "vmprotect": 3,
+          "nsis": 2,
+          "enigmaprotector": 2,
+          "mpress": 1
+        }
+      }
+    },
+    {
+      "id": "fam-jalapeno",
+      "name": "jalapeno",
+      "sample_count": 608,
+      "mean_family_confidence": 0.7572,
+      "first_seen": "2023-10-08",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Dot_Net": 589,
+        "Win32": 15,
+        "Win64": 4
+      },
+      "partitions": {
+        "Dot_Net_train": 416,
+        "Dot_Net_test": 162,
+        "challenge": 16,
+        "Win32_test": 10,
+        "Win64_test": 4
+      },
+      "tags": {
+        "behavior": {
+          "backdoor": 141,
+          "webshell": 138,
+          "virus": 51,
+          "cryptor": 21,
+          "downloader": 16
+        },
+        "file_property": {
+          "msil": 461,
+          "shellcode": 1
+        },
+        "packer": {
+          "vmprotect": 11
+        },
+        "group": {
+          "turla": 3
+        }
+      }
+    },
+    {
+      "id": "fam-asyncrat",
+      "name": "asyncrat",
+      "sample_count": 592,
+      "mean_family_confidence": 0.8018,
+      "first_seen": "2023-09-24",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Dot_Net": 571,
+        "Win64": 11,
+        "Win32": 10
+      },
+      "partitions": {
+        "Dot_Net_train": 497,
+        "Dot_Net_test": 74,
+        "Win32_test": 10,
+        "Win64_train": 8,
+        "Win64_test": 3
+      },
+      "tags": {
+        "behavior": {
+          "backdoor": 387,
+          "injector": 11,
+          "dropper": 9,
+          "stealer": 7,
+          "downloader": 7
+        },
+        "file_property": {
+          "msil": 583,
+          "powershell": 1
+        },
+        "packer": {
+          "enigmaprotector": 5,
           "vmprotect": 2,
+          "themida": 1
+        }
+      }
+    },
+    {
+      "id": "fam-darkcrystal",
+      "name": "darkcrystal",
+      "sample_count": 527,
+      "mean_family_confidence": 0.7992,
+      "first_seen": "2023-09-24",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Dot_Net": 501,
+        "Win64": 23,
+        "Win32": 3
+      },
+      "partitions": {
+        "Dot_Net_train": 453,
+        "Dot_Net_test": 48,
+        "Win64_train": 18,
+        "Win64_test": 5,
+        "Win32_test": 3
+      },
+      "tags": {
+        "behavior": {
+          "backdoor": 357,
+          "spyware": 143,
+          "stealer": 45,
+          "downloader": 6,
+          "dropper": 1
+        },
+        "file_property": {
+          "msil": 505
+        },
+        "packer": {
           "enigmaprotector": 2
         }
       }
     },
     {
-      "id": "fam-vobfus",
-      "name": "vobfus",
-      "sample_count": 214,
-      "mean_family_confidence": 0.7988,
-      "first_seen": "2024-09-23",
-      "last_seen": "2024-12-12",
+      "id": "fam-ribaj",
+      "name": "ribaj",
+      "sample_count": 473,
+      "mean_family_confidence": 0.8528,
+      "first_seen": "2023-09-26",
+      "last_seen": "2024-12-07",
       "file_types": {
-        "Win32": 214
+        "Dot_Net": 473
       },
       "partitions": {
-        "Win32_test": 214
+        "Dot_Net_train": 353,
+        "Dot_Net_test": 120
       },
       "tags": {
         "behavior": {
-          "worm": 212,
-          "autorun": 28,
-          "downloader": 2
+          "virus": 473
         },
         "file_property": {
-          "vb": 176
+          "msil": 473
         }
       }
     },
     {
-      "id": "fam-tinba",
-      "name": "tinba",
-      "sample_count": 210,
-      "mean_family_confidence": 0.849,
-      "first_seen": "2024-09-23",
-      "last_seen": "2024-12-14",
-      "file_types": {
-        "Win32": 210
-      },
-      "partitions": {
-        "Win32_test": 210
-      },
-      "tags": {
-        "behavior": {
-          "downloader": 18,
-          "cryptor": 8,
-          "injector": 6,
-          "worm": 2
-        },
-        "file_property": {
-          "vb": 6
-        },
-        "packer": {
-          "upx": 38
-        }
-      }
-    },
-    {
-      "id": "fam-blackmoon",
-      "name": "blackmoon",
-      "sample_count": 210,
-      "mean_family_confidence": 0.7868,
+      "id": "fam-glupteba",
+      "name": "glupteba",
+      "sample_count": 470,
+      "mean_family_confidence": 0.7646,
       "first_seen": "2024-09-22",
       "last_seen": "2024-12-14",
       "file_types": {
+        "Win32": 470
+      },
+      "partitions": {
+        "Win32_test": 470
+      },
+      "tags": {
+        "behavior": {
+          "selfmod": 29,
+          "packed": 29,
+          "injector": 1,
+          "cryptor": 1
+        },
+        "file_property": {
+          "codecpack": 209
+        }
+      }
+    },
+    {
+      "id": "fam-trickbot",
+      "name": "trickbot",
+      "sample_count": 447,
+      "mean_family_confidence": 0.7567,
+      "first_seen": "2023-10-10",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 432,
+        "Win64": 15
+      },
+      "partitions": {
+        "Win32_test": 432,
+        "Win64_train": 15
+      },
+      "tags": {
+        "behavior": {
+          "coinminer": 14,
+          "injector": 2,
+          "banker": 1
+        }
+      }
+    },
+    {
+      "id": "fam-stealc",
+      "name": "stealc",
+      "sample_count": 404,
+      "mean_family_confidence": 0.7558,
+      "first_seen": "2024-03-04",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 375,
+        "Dot_Net": 29
+      },
+      "partitions": {
+        "Win32_test": 375,
+        "Dot_Net_train": 28,
+        "Dot_Net_test": 1
+      },
+      "tags": {
+        "behavior": {
+          "coinminer": 99,
+          "stealer": 86,
+          "passwordstealer": 19,
+          "cryptor": 5,
+          "downloader": 1
+        },
+        "file_property": {
+          "msil": 29
+        },
+        "packer": {
+          "themida": 338,
+          "vmprotect": 2
+        }
+      }
+    },
+    {
+      "id": "fam-donut",
+      "name": "donut",
+      "sample_count": 378,
+      "mean_family_confidence": 0.7976,
+      "first_seen": "2023-09-24",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win64": 363,
+        "Dot_Net": 15
+      },
+      "partitions": {
+        "Win64_train": 313,
+        "Win64_test": 50,
+        "Dot_Net_train": 14,
+        "Dot_Net_test": 1
+      },
+      "tags": {
+        "behavior": {
+          "downloader": 5,
+          "exploit": 2,
+          "dropper": 1,
+          "injector": 1
+        },
+        "file_property": {
+          "msil": 11
+        },
+        "packer": {
+          "vmprotect": 2,
+          "themida": 2
+        }
+      }
+    },
+    {
+      "id": "fam-mabezat",
+      "name": "mabezat",
+      "sample_count": 377,
+      "mean_family_confidence": 0.8977,
+      "first_seen": "2024-09-27",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 377
+      },
+      "partitions": {
+        "Win32_test": 377
+      },
+      "tags": {
+        "behavior": {
+          "worm": 369,
+          "virus": 287
+        },
+        "packer": {
+          "upx": 3
+        }
+      }
+    },
+    {
+      "id": "fam-nitol",
+      "name": "nitol",
+      "sample_count": 369,
+      "mean_family_confidence": 0.8456,
+      "first_seen": "2024-09-22",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 369
+      },
+      "partitions": {
+        "Win32_test": 369
+      },
+      "tags": {
+        "behavior": {
+          "servstart": 211,
+          "ddos": 107,
+          "backdoor": 1
+        },
+        "packer": {
+          "upx": 7,
+          "vmprotect": 6
+        }
+      }
+    },
+    {
+      "id": "fam-mintluks",
+      "name": "mintluks",
+      "sample_count": 368,
+      "mean_family_confidence": 0.808,
+      "first_seen": "2023-09-24",
+      "last_seen": "2024-12-12",
+      "file_types": {
+        "Dot_Net": 368
+      },
+      "partitions": {
+        "Dot_Net_train": 277,
+        "Dot_Net_test": 91
+      },
+      "tags": {
+        "behavior": {
+          "dropper": 219
+        },
+        "file_property": {
+          "msil": 367
+        }
+      }
+    },
+    {
+      "id": "fam-ramnit",
+      "name": "ramnit",
+      "sample_count": 355,
+      "mean_family_confidence": 0.8688,
+      "first_seen": "2023-09-30",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 353,
+        "Win64": 2
+      },
+      "partitions": {
+        "Win32_test": 353,
+        "Win64_train": 2
+      },
+      "tags": {
+        "behavior": {
+          "virus": 341,
+          "worm": 3,
+          "backdoor": 3
+        },
+        "file_property": {
+          "vbs": 1
+        },
+        "packer": {
+          "upx": 11
+        }
+      }
+    },
+    {
+      "id": "fam-zeus",
+      "name": "zeus",
+      "sample_count": 334,
+      "mean_family_confidence": 0.8352,
+      "first_seen": "2023-09-24",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 263,
+        "Dot_Net": 63,
+        "Win64": 8
+      },
+      "partitions": {
+        "Win32_test": 263,
+        "Dot_Net_train": 50,
+        "Dot_Net_test": 13,
+        "Win64_train": 7,
+        "Win64_test": 1
+      },
+      "tags": {
+        "behavior": {
+          "spyware": 220,
+          "injector": 70,
+          "passwordstealer": 16,
+          "backdoor": 10,
+          "dropper": 8
+        },
+        "file_property": {
+          "msil": 62,
+          "vb": 1
+        },
+        "packer": {
+          "upx": 2,
+          "mystic": 1,
+          "vmprotect": 1
+        }
+      }
+    },
+    {
+      "id": "fam-chinachopper",
+      "name": "chinachopper",
+      "sample_count": 333,
+      "mean_family_confidence": 0.7761,
+      "first_seen": "2023-09-24",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Dot_Net": 332,
+        "Win32": 1
+      },
+      "partitions": {
+        "Dot_Net_train": 281,
+        "Dot_Net_test": 51,
+        "Win32_test": 1
+      },
+      "tags": {
+        "behavior": {
+          "backdoor": 324,
+          "webshell": 320
+        },
+        "file_property": {
+          "msil": 332
+        }
+      }
+    },
+    {
+      "id": "fam-engimastealer",
+      "name": "engimastealer",
+      "sample_count": 321,
+      "mean_family_confidence": 0.7663,
+      "first_seen": "2023-09-28",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win64": 291,
+        "Win32": 30
+      },
+      "partitions": {
+        "Win64_train": 246,
+        "Win64_test": 45,
+        "Win32_test": 30
+      },
+      "tags": {
+        "behavior": {
+          "packed": 35,
+          "backdoor": 1,
+          "coinminer": 1,
+          "downloader": 1
+        },
+        "packer": {
+          "enigmaprotector": 41,
+          "themida": 3,
+          "upx": 1
+        }
+      }
+    },
+    {
+      "id": "fam-khalesi",
+      "name": "khalesi",
+      "sample_count": 309,
+      "mean_family_confidence": 0.7717,
+      "first_seen": "2023-09-25",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win64": 297,
+        "Dot_Net": 8,
+        "Win32": 4
+      },
+      "partitions": {
+        "Win64_train": 240,
+        "Win64_test": 57,
+        "Dot_Net_train": 5,
+        "Win32_test": 4,
+        "Dot_Net_test": 3
+      },
+      "tags": {
+        "behavior": {
+          "downloader": 17,
+          "ransom": 3,
+          "stealer": 1,
+          "vmdetect": 1,
+          "gamehack": 1
+        },
+        "file_property": {
+          "msil": 4,
+          "autoit": 1
+        },
+        "packer": {
+          "vmprotect": 66,
+          "themida": 56,
+          "obsidium": 3,
+          "upx": 1
+        },
+        "group": {
+          "equationgroup": 1
+        }
+      }
+    },
+    {
+      "id": "fam-disco",
+      "name": "disco",
+      "sample_count": 302,
+      "mean_family_confidence": 0.7722,
+      "first_seen": "2023-09-24",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Dot_Net": 122,
+        "Win64": 108,
+        "Win32": 72
+      },
+      "partitions": {
+        "Dot_Net_train": 111,
+        "Win64_train": 87,
+        "Win32_test": 71,
+        "Win64_test": 17,
+        "Dot_Net_test": 11,
+        "challenge": 5
+      },
+      "tags": {
+        "behavior": {
+          "passwordstealer": 45,
+          "downloader": 13,
+          "spyware": 11,
+          "stealer": 7,
+          "dropper": 5
+        },
+        "file_property": {
+          "msil": 92,
+          "python": 2,
+          "js": 1
+        },
+        "packer": {
+          "themida": 8,
+          "vmprotect": 6,
+          "upx": 4
+        }
+      }
+    },
+    {
+      "id": "fam-qqrob",
+      "name": "qqrob",
+      "sample_count": 295,
+      "mean_family_confidence": 0.847,
+      "first_seen": "2023-10-15",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 278,
+        "Dot_Net": 16,
+        "Win64": 1
+      },
+      "partitions": {
+        "Win32_test": 277,
+        "Dot_Net_train": 9,
+        "Dot_Net_test": 7,
+        "challenge": 1,
+        "Win64_train": 1
+      },
+      "tags": {
+        "behavior": {
+          "passwordstealer": 236,
+          "stealer": 5,
+          "worm": 1,
+          "downloader": 1
+        },
+        "file_property": {
+          "msil": 13,
+          "powershell": 1,
+          "bat": 1
+        },
+        "packer": {
+          "upx": 78
+        }
+      }
+    },
+    {
+      "id": "fam-nanocore",
+      "name": "nanocore",
+      "sample_count": 289,
+      "mean_family_confidence": 0.8521,
+      "first_seen": "2023-09-25",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Dot_Net": 275,
+        "Win32": 8,
+        "Win64": 6
+      },
+      "partitions": {
+        "Dot_Net_train": 205,
+        "Dot_Net_test": 70,
+        "Win32_test": 8,
+        "Win64_train": 5,
+        "Win64_test": 1
+      },
+      "tags": {
+        "behavior": {
+          "backdoor": 223,
+          "spyware": 17,
+          "injector": 13,
+          "downloader": 9,
+          "riskware": 3
+        },
+        "file_property": {
+          "msil": 276
+        }
+      }
+    },
+    {
+      "id": "fam-bobik",
+      "name": "bobik",
+      "sample_count": 283,
+      "mean_family_confidence": 0.8001,
+      "first_seen": "2023-09-27",
+      "last_seen": "2024-12-13",
+      "file_types": {
+        "Dot_Net": 246,
+        "Win64": 31,
+        "Win32": 6
+      },
+      "partitions": {
+        "Dot_Net_train": 207,
+        "Dot_Net_test": 37,
+        "Win64_train": 20,
+        "Win64_test": 11,
+        "Win32_test": 6,
+        "challenge": 2
+      },
+      "tags": {
+        "behavior": {
+          "spyware": 200,
+          "downloader": 6,
+          "backdoor": 4,
+          "passwordstealer": 3,
+          "gamehack": 1
+        },
+        "file_property": {
+          "msil": 186,
+          "python": 1
+        },
+        "packer": {
+          "vmprotect": 7
+        }
+      }
+    },
+    {
+      "id": "fam-cerbu",
+      "name": "cerbu",
+      "sample_count": 276,
+      "mean_family_confidence": 0.7449,
+      "first_seen": "2023-09-27",
+      "last_seen": "2024-12-13",
+      "file_types": {
+        "Win64": 185,
+        "Dot_Net": 75,
+        "Win32": 16
+      },
+      "partitions": {
+        "Win64_train": 134,
+        "Win64_test": 51,
+        "Dot_Net_train": 40,
+        "Dot_Net_test": 33,
+        "Win32_test": 13,
+        "challenge": 5
+      },
+      "tags": {
+        "behavior": {
+          "gamehack": 33,
+          "coinminer": 5,
+          "injector": 4,
+          "passwordstealer": 3,
+          "stealer": 2
+        },
+        "file_property": {
+          "msil": 3
+        },
+        "packer": {
+          "themida": 6,
+          "mystic": 1,
+          "mpress": 1
+        }
+      }
+    },
+    {
+      "id": "fam-stormattack",
+      "name": "stormattack",
+      "sample_count": 271,
+      "mean_family_confidence": 0.8734,
+      "first_seen": "2024-09-22",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 271
+      },
+      "partitions": {
+        "Win32_test": 271
+      },
+      "tags": {
+        "behavior": {
+          "ddos": 251,
+          "dropper": 222,
+          "downloader": 1
+        },
+        "packer": {
+          "upx": 1
+        }
+      }
+    },
+    {
+      "id": "fam-jeefo",
+      "name": "jeefo",
+      "sample_count": 270,
+      "mean_family_confidence": 0.8761,
+      "first_seen": "2023-12-06",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 266,
+        "Dot_Net": 2,
+        "Win64": 2
+      },
+      "partitions": {
+        "Win32_test": 266,
+        "Win64_train": 2,
+        "Dot_Net_test": 1,
+        "Dot_Net_train": 1
+      },
+      "tags": {
+        "behavior": {
+          "virus": 269
+        }
+      }
+    },
+    {
+      "id": "fam-remcos",
+      "name": "remcos",
+      "sample_count": 266,
+      "mean_family_confidence": 0.8006,
+      "first_seen": "2023-09-26",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Dot_Net": 144,
+        "Win32": 88,
+        "Win64": 34
+      },
+      "partitions": {
+        "Dot_Net_train": 119,
+        "Win32_test": 88,
+        "Dot_Net_test": 25,
+        "Win64_train": 24,
+        "Win64_test": 10
+      },
+      "tags": {
+        "behavior": {
+          "backdoor": 153,
+          "downloader": 11,
+          "injector": 9,
+          "spyware": 1,
+          "cryptor": 1
+        },
+        "file_property": {
+          "msil": 138,
+          "autoit": 8
+        },
+        "packer": {
+          "themida": 2,
+          "nsis": 2,
+          "upx": 2,
+          "vmprotect": 2,
+          "mpress": 1
+        }
+      }
+    },
+    {
+      "id": "fam-urelas",
+      "name": "urelas",
+      "sample_count": 257,
+      "mean_family_confidence": 0.8492,
+      "first_seen": "2024-03-23",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 257
+      },
+      "partitions": {
+        "Win32_test": 256,
+        "challenge": 1
+      },
+      "tags": {
+        "behavior": {
+          "backdoor": 178,
+          "rootkit": 6,
+          "downloader": 1
+        },
+        "packer": {
+          "upx": 4
+        }
+      }
+    },
+    {
+      "id": "fam-amadey",
+      "name": "amadey",
+      "sample_count": 254,
+      "mean_family_confidence": 0.7866,
+      "first_seen": "2023-10-21",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 240,
+        "Win64": 8,
+        "Dot_Net": 6
+      },
+      "partitions": {
+        "Win32_test": 240,
+        "Win64_test": 5,
+        "Dot_Net_test": 4,
+        "Win64_train": 3,
+        "Dot_Net_train": 2
+      },
+      "tags": {
+        "behavior": {
+          "downloader": 111,
+          "stealer": 8,
+          "spyware": 4,
+          "passwordstealer": 4,
+          "disabler": 2
+        },
+        "file_property": {
+          "msil": 9
+        },
+        "packer": {
+          "themida": 153,
+          "vmprotect": 2
+        }
+      }
+    },
+    {
+      "id": "fam-zegost",
+      "name": "zegost",
+      "sample_count": 240,
+      "mean_family_confidence": 0.8013,
+      "first_seen": "2023-09-28",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 195,
+        "Win64": 44,
+        "Dot_Net": 1
+      },
+      "partitions": {
+        "Win32_test": 194,
+        "Win64_train": 33,
+        "Win64_test": 11,
+        "challenge": 1,
+        "Dot_Net_train": 1
+      },
+      "tags": {
+        "behavior": {
+          "backdoor": 158,
+          "downloader": 27,
+          "dropper": 11,
+          "spyware": 6,
+          "injector": 4
+        },
+        "file_property": {
+          "msil": 1
+        },
+        "packer": {
+          "vmprotect": 5,
+          "upx": 1,
+          "nspm": 1
+        },
+        "group": {
+          "knotweed": 1
+        }
+      }
+    },
+    {
+      "id": "fam-mimikatz",
+      "name": "mimikatz",
+      "sample_count": 230,
+      "mean_family_confidence": 0.8177,
+      "first_seen": "2023-09-28",
+      "last_seen": "2024-12-10",
+      "file_types": {
+        "Win64": 195,
+        "Win32": 18,
+        "Dot_Net": 17
+      },
+      "partitions": {
+        "Win64_train": 175,
+        "Win64_test": 20,
+        "Win32_test": 18,
+        "Dot_Net_train": 17
+      },
+      "tags": {
+        "behavior": {
+          "hacktool": 118,
+          "riskware": 31,
+          "passwordstealer": 24,
+          "injector": 2,
+          "cryptor": 1
+        },
+        "file_property": {
+          "msil": 6
+        },
+        "packer": {
+          "themida": 2,
+          "vmprotect": 1
+        },
+        "exploit": {
+          "cve_2021_1675": 3
+        }
+      }
+    },
+    {
+      "id": "fam-pemalform",
+      "name": "pemalform",
+      "sample_count": 229,
+      "mean_family_confidence": 0.7529,
+      "first_seen": "2023-09-30",
+      "last_seen": "2024-11-19",
+      "file_types": {
+        "Win64": 228,
+        "Win32": 1
+      },
+      "partitions": {
+        "Win64_train": 158,
+        "Win64_test": 70,
+        "Win32_test": 1
+      },
+      "tags": {
+        "behavior": {
+          "riskware": 121
+        },
+        "exploit": {
+          "cve_2018_8440": 2,
+          "cve_202336874_36874": 1
+        }
+      }
+    },
+    {
+      "id": "fam-barys",
+      "name": "barys",
+      "sample_count": 227,
+      "mean_family_confidence": 0.7566,
+      "first_seen": "2023-10-01",
+      "last_seen": "2024-12-13",
+      "file_types": {
+        "Win64": 94,
+        "Dot_Net": 91,
+        "Win32": 42
+      },
+      "partitions": {
+        "Win64_train": 88,
+        "Dot_Net_train": 79,
+        "Win32_test": 42,
+        "Dot_Net_test": 12,
+        "Win64_test": 4,
+        "challenge": 2
+      },
+      "tags": {
+        "behavior": {
+          "dropper": 19,
+          "backdoor": 12,
+          "downloader": 11,
+          "spyware": 7,
+          "injector": 7
+        },
+        "file_property": {
+          "msil": 44,
+          "vb": 7
+        },
+        "packer": {
+          "vmprotect": 8,
+          "upx": 2
+        }
+      }
+    },
+    {
+      "id": "fam-dinwod",
+      "name": "dinwod",
+      "sample_count": 223,
+      "mean_family_confidence": 0.8596,
+      "first_seen": "2023-10-08",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 216,
+        "Win64": 6,
+        "Dot_Net": 1
+      },
+      "partitions": {
+        "Win32_test": 216,
+        "Win64_train": 6,
+        "Dot_Net_train": 1
+      },
+      "tags": {
+        "behavior": {
+          "dropper": 220,
+          "downloader": 1
+        },
+        "packer": {
+          "upx": 68,
+          "vmprotect": 3,
+          "themida": 2
+        }
+      }
+    },
+    {
+      "id": "fam-puce",
+      "name": "puce",
+      "sample_count": 212,
+      "mean_family_confidence": 0.8517,
+      "first_seen": "2024-09-22",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Win32": 212
+      },
+      "partitions": {
+        "Win32_test": 212
+      },
+      "tags": {
+        "behavior": {
+          "virus": 212
+        }
+      }
+    },
+    {
+      "id": "fam-ekstak",
+      "name": "ekstak",
+      "sample_count": 210,
+      "mean_family_confidence": 0.7806,
+      "first_seen": "2024-09-24",
+      "last_seen": "2024-12-14",
+      "file_types": {
         "Win32": 210
       },
       "partitions": {
@@ -1655,18 +1872,94 @@
       },
       "tags": {
         "behavior": {
-          "downloader": 24,
-          "packed": 8,
-          "coinminer": 2
+          "adware": 8,
+          "dropper": 3
         },
         "packer": {
-          "upx": 44,
-          "vmprotect": 16,
-          "nspack": 2,
-          "themida": 2
+          "nsis": 1
+        }
+      }
+    },
+    {
+      "id": "fam-lolbot",
+      "name": "lolbot",
+      "sample_count": 210,
+      "mean_family_confidence": 0.8275,
+      "first_seen": "2024-09-22",
+      "last_seen": "2024-12-13",
+      "file_types": {
+        "Win32": 210
+      },
+      "partitions": {
+        "Win32_test": 210
+      },
+      "tags": {
+        "behavior": {
+          "backdoor": 202,
+          "worm": 196
+        }
+      }
+    },
+    {
+      "id": "fam-andromeda",
+      "name": "andromeda",
+      "sample_count": 207,
+      "mean_family_confidence": 0.7948,
+      "first_seen": "2023-09-29",
+      "last_seen": "2024-12-14",
+      "file_types": {
+        "Dot_Net": 99,
+        "Win64": 59,
+        "Win32": 49
+      },
+      "partitions": {
+        "Dot_Net_train": 74,
+        "Win64_train": 52,
+        "Win32_test": 49,
+        "Dot_Net_test": 25,
+        "Win64_test": 7
+      },
+      "tags": {
+        "behavior": {
+          "backdoor": 112,
+          "downloader": 50,
+          "worm": 18,
+          "injector": 15,
+          "gamehack": 1
         },
-        "group": {
-          "equationgroup": 2
+        "file_property": {
+          "msil": 87,
+          "vb": 8
+        },
+        "packer": {
+          "vmprotect": 13,
+          "nsis": 5,
+          "themida": 1,
+          "upx": 1
+        }
+      }
+    },
+    {
+      "id": "fam-dridex",
+      "name": "dridex",
+      "sample_count": 206,
+      "mean_family_confidence": 0.7875,
+      "first_seen": "2023-09-25",
+      "last_seen": "2024-12-11",
+      "file_types": {
+        "Win64": 202,
+        "Win32": 4
+      },
+      "partitions": {
+        "Win64_train": 181,
+        "Win64_test": 21,
+        "Win32_test": 4
+      },
+      "tags": {
+        "behavior": {
+          "banker": 2,
+          "coinminer": 1,
+          "backdoor": 1
         }
       }
     }
@@ -1748,6 +2041,58 @@
     "Dot_Net_test\\2024-11-24_2024-11-30_Dot_Net_test.jsonl": "5d8184ee9f193b7b8fcbd0477807d2e49e72ab95ed3736b14e73131f97da0f50",
     "Dot_Net_test\\2024-12-01_2024-12-07_Dot_Net_test.jsonl": "c6a9282452f2813eaacd0758f3a884f0fb0bb1612cb5b3cb5c31093da7e2926b",
     "Dot_Net_test\\2024-12-08_2024-12-14_Dot_Net_test.jsonl": "4899cb6132e157a454f871d119a2ae3bbcf21d74fb629a2b4d03864001d255a7",
+    "Dot_Net_train\\2023-09-24_2023-09-30_Dot_Net_train.jsonl": "b2d68d2c0ac5a33743b12b1e171e4de5e05090c6fc396ae6fd7a47efd082aa21",
+    "Dot_Net_train\\2023-10-01_2023-10-07_Dot_Net_train.jsonl": "aaaf17794a40186639e85a68366f4cdae600e27ec9ba578e3f6e44566b06075b",
+    "Dot_Net_train\\2023-10-08_2023-10-14_Dot_Net_train.jsonl": "76ebc77ca79d5519858ca0a6897b2c7188ad729597b971f5fc5994e820ec1867",
+    "Dot_Net_train\\2023-10-15_2023-10-21_Dot_Net_train.jsonl": "763a5bf90cb22af7652f5a6bf1610f8ddb027fd7110994d28fb740b7d152a421",
+    "Dot_Net_train\\2023-10-22_2023-10-28_Dot_Net_train.jsonl": "f4f12f33b1fa7694a3e8ff0ff93922465ec5df9c0f02a6f3a1511319bdd7e6dc",
+    "Dot_Net_train\\2023-10-29_2023-11-04_Dot_Net_train.jsonl": "2570cdd4b3226e04e6fdfe9e81137e0fe7f8c24e47aa52a9f2bf0d1fd3de7e9b",
+    "Dot_Net_train\\2023-11-05_2023-11-11_Dot_Net_train.jsonl": "a708d22f7f9e5057c066353474db7a33b2dd7132c9d83c3577c727eda7e76538",
+    "Dot_Net_train\\2023-11-12_2023-11-18_Dot_Net_train.jsonl": "dbfbc9d80483abae1b744afd44ca19017a44ed643c39cf4adf4781fe2ebee426",
+    "Dot_Net_train\\2023-11-19_2023-11-25_Dot_Net_train.jsonl": "bdf326b6aff5ff5eddfbc7ac25c4e4ed29bf7e15e511b8dbd296940db55fdeba",
+    "Dot_Net_train\\2023-11-26_2023-12-02_Dot_Net_train.jsonl": "cd98b853204c8ed8b22c88212ae4ba6523a3360937acd99c7d2a80fd1b0b6446",
+    "Dot_Net_train\\2023-12-03_2023-12-09_Dot_Net_train.jsonl": "e70246201ecb23bbfcb31e34838273f07f3f1debf64188af09d2c382f531ce37",
+    "Dot_Net_train\\2023-12-10_2023-12-16_Dot_Net_train.jsonl": "1ec54dfd48a13292739d107276d956469103ad32b3d0e97f6d605e8ebaaa0533",
+    "Dot_Net_train\\2023-12-17_2023-12-23_Dot_Net_train.jsonl": "b9da59599cfb92efeb858b0aa37c5b631df30e1559f49fc55e0bf39fcbbf64b9",
+    "Dot_Net_train\\2023-12-24_2023-12-30_Dot_Net_train.jsonl": "41125ea5da3bbed48783cdccb4d31c739bc35ee88eb90e37678268214269b2b9",
+    "Dot_Net_train\\2023-12-31_2024-01-06_Dot_Net_train.jsonl": "88ddff35360ae09afe8903dddc126678c812d0c2880213668c8f71ba62c274cd",
+    "Dot_Net_train\\2024-01-07_2024-01-13_Dot_Net_train.jsonl": "60f3ba6ff7b468a8d94dc1fca94fda6959f6a74d8ced17695576d0985a0d8a45",
+    "Dot_Net_train\\2024-01-14_2024-01-20_Dot_Net_train.jsonl": "009406f9413ca48ceca4bce2b7d5bff3b5174c7469d047123746159f9820dae4",
+    "Dot_Net_train\\2024-01-21_2024-01-27_Dot_Net_train.jsonl": "aaefc5c68de1cc52ea8b040a91f83f30a20a5c860133285e4fc637d241cee31f",
+    "Dot_Net_train\\2024-01-28_2024-02-03_Dot_Net_train.jsonl": "57c762e04c4bb101da6222a79cd83a32e02da70c81247f8edf4616fe4b095c5a",
+    "Dot_Net_train\\2024-02-04_2024-02-10_Dot_Net_train.jsonl": "0954282d4c51c53fcf5dc54680f6627242526f89465f2605d171816f1650a221",
+    "Dot_Net_train\\2024-02-11_2024-02-17_Dot_Net_train.jsonl": "e1321078a8c1b3cd36225ddb42d24ccb7f4a2320f53802aeea7b5782dbe8b914",
+    "Dot_Net_train\\2024-02-18_2024-02-24_Dot_Net_train.jsonl": "bcc8ae4912f44e54e5a67ece4e6e1ae7caa43bd7f0e10bf62b151827b18dcb4f",
+    "Dot_Net_train\\2024-02-25_2024-03-02_Dot_Net_train.jsonl": "0f52ead12e3bb29d8e19e4e8b0b4e3cdce8ccb55faf96a45516aebd380e443ad",
+    "Dot_Net_train\\2024-03-03_2024-03-09_Dot_Net_train.jsonl": "38e015ba29bbf6a251142f4c8a1609e8d91ab3fa92df84cca4935f210c64ff02",
+    "Dot_Net_train\\2024-03-10_2024-03-16_Dot_Net_train.jsonl": "8da5d52339c7621679e804efee909ed917a89102cadad4bd1178d8674dc1325d",
+    "Dot_Net_train\\2024-03-17_2024-03-23_Dot_Net_train.jsonl": "3e82fa1cc31d0e3d9ce622b0184abc84e5633b08e732bb500ff9b6505d0fde85",
+    "Dot_Net_train\\2024-03-24_2024-03-30_Dot_Net_train.jsonl": "5206fada4461d8ccb1414a9dedd9589401796c75262a03e1716d1e35e4254c48",
+    "Dot_Net_train\\2024-03-31_2024-04-06_Dot_Net_train.jsonl": "fb7fabd2200df5d10055f80d5e9524ec3f4ebed68143e139163f562f34721409",
+    "Dot_Net_train\\2024-04-07_2024-04-13_Dot_Net_train.jsonl": "dae495c39ccffa0a190e16c66d6e4799568290e0e4c77c7cbd55d6cdd480e350",
+    "Dot_Net_train\\2024-04-14_2024-04-20_Dot_Net_train.jsonl": "6a9f5e098f0b035ed4ff043a2b4f18dfc6f5fcf3063a2512b9b207ed350ea7af",
+    "Dot_Net_train\\2024-04-21_2024-04-27_Dot_Net_train.jsonl": "2541dd9820f239de4c75dc7dc227b01eac7ff53c939458c0fa895ac3abf66283",
+    "Dot_Net_train\\2024-04-28_2024-05-04_Dot_Net_train.jsonl": "b925f459712566445685c55acd2517543082c409020d5c39eb3f9a2adba917d9",
+    "Dot_Net_train\\2024-05-05_2024-05-11_Dot_Net_train.jsonl": "4fc0c1741da925d5b631b6a7515b5aea4191ed4c0ca006c19b878b794dc81142",
+    "Dot_Net_train\\2024-05-12_2024-05-18_Dot_Net_train.jsonl": "ac03f19db3d597dcb61c0792b2947aaa37c333684c2c32fe133c597253095e53",
+    "Dot_Net_train\\2024-05-19_2024-05-25_Dot_Net_train.jsonl": "5a0124041e90465376aa04f188e7cce67e7d845183da24b362a963d50c60d9db",
+    "Dot_Net_train\\2024-05-26_2024-06-01_Dot_Net_train.jsonl": "aa4799053449d57a373ebe9a65bbfa91950b101c95499162df75690f0a3e13b3",
+    "Dot_Net_train\\2024-06-02_2024-06-08_Dot_Net_train.jsonl": "5bda3c8616b4f59867b5e985b60a75cec3a98555a00b206d18d9bfe49299efe6",
+    "Dot_Net_train\\2024-06-09_2024-06-15_Dot_Net_train.jsonl": "6d9b49013923afb6132d66901b9f8c0cf5a3a0895fb748f96bc1c97e8cf97013",
+    "Dot_Net_train\\2024-06-16_2024-06-22_Dot_Net_train.jsonl": "0da1dad61ca140a52d0533f92c02c7e28b3cb4b16050f63c78cfe3d0242ad89e",
+    "Dot_Net_train\\2024-06-23_2024-06-29_Dot_Net_train.jsonl": "fe3b1e782c1b354e8eb47551060adfa449e201abc0e3d4520161cf382be0bc44",
+    "Dot_Net_train\\2024-06-30_2024-07-06_Dot_Net_train.jsonl": "884a59c980a70195bb5dea8e648c1572ed746676dd05d02ef32db014a560e51b",
+    "Dot_Net_train\\2024-07-07_2024-07-13_Dot_Net_train.jsonl": "108b024409be8486a854b2f5e289e6f406c3ff9e6bfd8e5f2f49685ebb480328",
+    "Dot_Net_train\\2024-07-14_2024-07-20_Dot_Net_train.jsonl": "32adaf9e0abe6d7de943d2279260375e36a68701c44b28e17497e814f1a9951a",
+    "Dot_Net_train\\2024-07-21_2024-07-27_Dot_Net_train.jsonl": "e23cea6028ffa6c5161a22378708ff21ab668415fd980f3fdef32f077df0d533",
+    "Dot_Net_train\\2024-07-28_2024-08-03_Dot_Net_train.jsonl": "b2ce363beb89bffcc2b618654d4a12cd9d47839edc9c9d7c0e43ed2ce0949756",
+    "Dot_Net_train\\2024-08-04_2024-08-10_Dot_Net_train.jsonl": "d6bfa08493093062616e2a872a9bb2933903ec350ea0e654b1b3eaf02016fad5",
+    "Dot_Net_train\\2024-08-11_2024-08-17_Dot_Net_train.jsonl": "2deb2b42bdac7922d57f6fab38ed201febe3b2105a140bcac1a523b61e8f347f",
+    "Dot_Net_train\\2024-08-18_2024-08-24_Dot_Net_train.jsonl": "f3c1cc5f0ac21e0375233763e6a7c9a2c9ea54ebf49cafdfff836cae135ea625",
+    "Dot_Net_train\\2024-08-25_2024-08-31_Dot_Net_train.jsonl": "3141b4b2659cd00cdf829b478315b268447fe9d3b1ebd7753caf7fbcf3895a96",
+    "Dot_Net_train\\2024-09-01_2024-09-07_Dot_Net_train.jsonl": "14c80f1e52546eb47c76e9cf3aacf96b70265df18075788df399b377d99eff2e",
+    "Dot_Net_train\\2024-09-08_2024-09-14_Dot_Net_train.jsonl": "a4068a3fcb35b9931f44e83e6d108abe418d2515ac53dd9ae6ea703ce241b709",
+    "Dot_Net_train\\2024-09-15_2024-09-21_Dot_Net_train.jsonl": "a5067ed8977d0c53a09b1a451ead014052ecb2ea76a56ed2d3559ea28d667f2f",
     "Win32_test\\2024-09-22_2024-09-28_Win32_test.jsonl": "cb6c73a08ed4a6cb2d06c6edcd6b20e454d8e683f98d96f03d381599faa5f0fb",
     "Win32_test\\2024-09-29_2024-10-05_Win32_test.jsonl": "b6c22dca40eef76ffa78d2b858d2c2313a4d01d36796788336cb1ca2f61d02c4",
     "Win32_test\\2024-10-06_2024-10-12_Win32_test.jsonl": "8d9667dcfb0baa7ce9256f0c8e631b3539c3db762f2faeabc1a673b6b7567d8c",
@@ -1771,6 +2116,58 @@
     "Win64_test\\2024-11-17_2024-11-23_Win64_test.jsonl": "09655d223faca798f286d7bdd3c4ddfc726132dbd26f2800a0423ee3064a2d44",
     "Win64_test\\2024-11-24_2024-11-30_Win64_test.jsonl": "cb1cfdff97b86334fe0167dabc3c602fc1d0346b40936936d074d6e82d39ea0f",
     "Win64_test\\2024-12-01_2024-12-07_Win64_test.jsonl": "c51e2f7826eefd6609d4fe82bc0d05412421ddcad9a30f6cc3947644ee7e5a58",
-    "Win64_test\\2024-12-08_2024-12-14_Win64_test.jsonl": "8ceaad2bd5a736abc35a308dc177ba08ea326faf52402f1b2f1b9f8f39e090c1"
+    "Win64_test\\2024-12-08_2024-12-14_Win64_test.jsonl": "8ceaad2bd5a736abc35a308dc177ba08ea326faf52402f1b2f1b9f8f39e090c1",
+    "Win64_train\\2023-09-24_2023-09-30_Win64_train.jsonl": "ba74ec51701aee784b7f9451a5011e65753a1fec60a874d14a3ed6707b72247f",
+    "Win64_train\\2023-10-01_2023-10-07_Win64_train.jsonl": "b5ce5fd78a4dc87806e494bd7dd063308d041e3bb79131ee84bbe5c024620647",
+    "Win64_train\\2023-10-08_2023-10-14_Win64_train.jsonl": "3140720736c00f76a57a802207058a2dfca31478fe2e01a9c5d044f324ed1a62",
+    "Win64_train\\2023-10-15_2023-10-21_Win64_train.jsonl": "c9daac50a1e263340aaeb28623f4ea335756311c8996d39cb314280a07874f5a",
+    "Win64_train\\2023-10-22_2023-10-28_Win64_train.jsonl": "1c97db88b2d64f74ee7580ff155197a7397b4c7676ed577a705018748f98a307",
+    "Win64_train\\2023-10-29_2023-11-04_Win64_train.jsonl": "671fb30863bd55f4d012564d60d97fb248846ab26ca9e5ad825398314f446c0a",
+    "Win64_train\\2023-11-05_2023-11-11_Win64_train.jsonl": "d7c69d1adab9f035e3d9faedaf998ffca8122cd3651eb957c07c933821c28f18",
+    "Win64_train\\2023-11-12_2023-11-18_Win64_train.jsonl": "dfcd17d95b49800a07561b14ec2801d4fa5ff0e306e57d1be757a50027ace6ba",
+    "Win64_train\\2023-11-19_2023-11-25_Win64_train.jsonl": "59f8e095b2e3cb0e3cd0ceaf0020820d8c39ebc2a1d95e8a04c41a53b8f8b3fa",
+    "Win64_train\\2023-11-26_2023-12-02_Win64_train.jsonl": "a37a693d77641eae1c0a30a7fb3d6670d0fdabca413e257d70342bc47e2d430b",
+    "Win64_train\\2023-12-03_2023-12-09_Win64_train.jsonl": "48794c20321da2de4e1b12bf5e8391d643d20ef94a2471d8b52213a38df68d35",
+    "Win64_train\\2023-12-10_2023-12-16_Win64_train.jsonl": "5dff7eca42c888cdb998033069707b5ae1012036e047e5d11c941eb45bb93a54",
+    "Win64_train\\2023-12-17_2023-12-23_Win64_train.jsonl": "73978125d7b2050e503fc3041b2f2913b41ad172c808c68ffd4d150e1805b20d",
+    "Win64_train\\2023-12-24_2023-12-30_Win64_train.jsonl": "e5d0a2dfe7d8d887ef0b02ecf3b917182c4185b759c37aad91e19267a7d51110",
+    "Win64_train\\2023-12-31_2024-01-06_Win64_train.jsonl": "3245be37381b79ebb40f310ac6a4a1a0a73983a0a558de9e9d85cac8e0a8ba35",
+    "Win64_train\\2024-01-07_2024-01-13_Win64_train.jsonl": "870e9ff8ea5a05dbec4489f45f2da6d7c1cbe84ab252825bc935c09032bad2d1",
+    "Win64_train\\2024-01-14_2024-01-20_Win64_train.jsonl": "2b65804b1a01b668b78cb92104b3c7f5cd35104b7adfa5de3c4ffc02c915e3ec",
+    "Win64_train\\2024-01-21_2024-01-27_Win64_train.jsonl": "98416c88fb48f940f907afdc74902360a76b962a12fff36c6698e93e3f6f18b0",
+    "Win64_train\\2024-01-28_2024-02-03_Win64_train.jsonl": "d05fcb0be386f99ce8d60ffe926712a37cd474b90c6e17902eb2d7a4210aa420",
+    "Win64_train\\2024-02-04_2024-02-10_Win64_train.jsonl": "191dbb6d7d924876d53585ac7236dd26c1b26a22b8183b50dc1ef1a5e31f0b98",
+    "Win64_train\\2024-02-11_2024-02-17_Win64_train.jsonl": "a3c622bc1ddf9651d227711ca9d7189d48badbaf512bbca913b5838df7541691",
+    "Win64_train\\2024-02-18_2024-02-24_Win64_train.jsonl": "aedc7f88249e488390405c134b5bd429339a23293d44ff4008d8dd53a3d5ee60",
+    "Win64_train\\2024-02-25_2024-03-02_Win64_train.jsonl": "cedab8ec42ea3e27c0412933b7f43ee322ebfbe381f06a83ec7b9a66f6bfd350",
+    "Win64_train\\2024-03-03_2024-03-09_Win64_train.jsonl": "37cdfc423977e70fbdf480609627ac917d6f0a936e47aca7510d9c4a8670cae8",
+    "Win64_train\\2024-03-10_2024-03-16_Win64_train.jsonl": "508f794b56375604bc96b5f8706e645ef8459d81b353355e3763b6ebdb548099",
+    "Win64_train\\2024-03-17_2024-03-23_Win64_train.jsonl": "4c59d1f3f3766d5e86ca7cfb408df97d11eb404ee8ef3512901c5d93f342069c",
+    "Win64_train\\2024-03-24_2024-03-30_Win64_train.jsonl": "8059165b3cf4b3953eac262839150c38ed7aed2794bf7703a674fef7bec283d8",
+    "Win64_train\\2024-03-31_2024-04-06_Win64_train.jsonl": "d8362c816f1007754ad375f2857fdab5c2ac9d6240b8cf85bd364934e86b967b",
+    "Win64_train\\2024-04-07_2024-04-13_Win64_train.jsonl": "d92f0043224114a185d493d73fde95fa2b3c13ffa78fe7b4d64b763d9ca32bff",
+    "Win64_train\\2024-04-14_2024-04-20_Win64_train.jsonl": "254eb42c23db52e4a12602176e18acf94e59eec3bd979b2f33e37009b81770bf",
+    "Win64_train\\2024-04-21_2024-04-27_Win64_train.jsonl": "68289e700f91d44271a101c3f220236570b53470ff6290525ed696334f37dcbd",
+    "Win64_train\\2024-04-28_2024-05-04_Win64_train.jsonl": "7ec37dba8d50c397517a6ee7ca1318f0cbb940d09f86ded78c0891d07f5f17bb",
+    "Win64_train\\2024-05-05_2024-05-11_Win64_train.jsonl": "aeb36c691e72abd912a6d9069db24b4389c0612288713056ccbe99426a1c72ed",
+    "Win64_train\\2024-05-12_2024-05-18_Win64_train.jsonl": "3c308c0e8dc3fcd47a69afa7d16791a36a716be74ca684d0b5254f3aecab2125",
+    "Win64_train\\2024-05-19_2024-05-25_Win64_train.jsonl": "ff675659febf6934a030edd89c60c1bf82439550a41f977cacaf12a9645108f4",
+    "Win64_train\\2024-05-26_2024-06-01_Win64_train.jsonl": "88324e1ae5e1fafb3a25af4ace55b827675d4af965fcdad68d8167f754fa2fdd",
+    "Win64_train\\2024-06-02_2024-06-08_Win64_train.jsonl": "37bc98dfda096f58de0f0a27d55f20e71275afc2cb3cb0bda75c75edb7db360d",
+    "Win64_train\\2024-06-09_2024-06-15_Win64_train.jsonl": "6e47ca0d6ec65f3f0bc64b41c988387e7167942fbd2f01988302bbb12ef12db3",
+    "Win64_train\\2024-06-16_2024-06-22_Win64_train.jsonl": "c2dc4836451a9b9cf2da6be9048101579b710e2b92090bae3d5ff7a8b8b9246b",
+    "Win64_train\\2024-06-23_2024-06-29_Win64_train.jsonl": "43685bf04c1162342d9d4ade37c3c06d2539f628ded497c24beee2f74804dc1a",
+    "Win64_train\\2024-06-30_2024-07-06_Win64_train.jsonl": "5613041b31f06b565b06bf1e1cb417eeeb011c033f93f8d7d4204b63bec4c784",
+    "Win64_train\\2024-07-07_2024-07-13_Win64_train.jsonl": "ad90482e4baffde1696d982e8f461ebd39f7889d42d80b7aa6590d7e41bb5be0",
+    "Win64_train\\2024-07-14_2024-07-20_Win64_train.jsonl": "45f7883488b21eb84026229762c44030737c687d4190c6fe486b74890d5878fe",
+    "Win64_train\\2024-07-21_2024-07-27_Win64_train.jsonl": "1af00fbb41611bd2456437ab349f069053c0b5838f7fd85855b7878bb3111cee",
+    "Win64_train\\2024-07-28_2024-08-03_Win64_train.jsonl": "4cd15d9a12c319915ad8d4613ae07dbc1d9f39d9aa3b9abb5bbca1208cc66f5b",
+    "Win64_train\\2024-08-04_2024-08-10_Win64_train.jsonl": "82cb8e373e6fc8829aee31d2f75ba429623f7aacc5028d4eca6e66b16706cc2b",
+    "Win64_train\\2024-08-11_2024-08-17_Win64_train.jsonl": "18dc8e3038719be229624d5bf8c78fbbc2d50b1623f6a9ba48b89ddbb0d92d27",
+    "Win64_train\\2024-08-18_2024-08-24_Win64_train.jsonl": "1603aae47dc0abfdda6bd536ad3fb005045348b56e46e03b5254aafe6d27efd3",
+    "Win64_train\\2024-08-25_2024-08-31_Win64_train.jsonl": "9a2b94211e66f828957bcd35ebe9d19918f94dfe294f9a2bdada3823ee65c233",
+    "Win64_train\\2024-09-01_2024-09-07_Win64_train.jsonl": "644adc00c706510ef8a0270dbc1c3198450fe938f70f7dcbc358be33a25d2716",
+    "Win64_train\\2024-09-08_2024-09-14_Win64_train.jsonl": "8f6cd682d3201a022ac9dac3c551bc67380caa520f6e71db1f50e9c668206c61",
+    "Win64_train\\2024-09-15_2024-09-21_Win64_train.jsonl": "5e8206fbf5018be6bbdd462dd3ef5d7d1de1628ea2edcc027aeed291932957a5"
   }
 }

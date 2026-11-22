@@ -14,8 +14,8 @@ All notable changes to ThreatWeaver. Format: [Keep a Changelog](https://keepacha
 - Full scans no longer skip temp, browser-cache, download and installer-cache folders.
 
 ### Added
-- LightGBM detector on EMBER2024 feature version 3 (official `thrember` extractor), calibrated, with thresholds for 1% and 0.1% false-positive rates chosen on temporal validation data.
-- Verdict policy v2 with *Known Malicious*, *Likely Malicious* and *Trusted Signer*; signatures are evidence, not a bypass (v2 detector).
+- LightGBM detector on EMBER2024 feature version 3 (official `thrember` extractor), trained on Win64 + .NET, calibrated, with thresholds for 1% and 0.1% false-positive rates chosen on temporal validation data. It is the default detector; `--legacy` selects the v0.1 model.
+- Verdict policy v2 with *Known Malicious*, *Likely Malicious* and *Trusted Signer*; signatures are evidence, not a bypass.
 - Per-file explanations (exact TreeSHAP grouped into feature families) and static indicators tuned against signed Windows binaries.
 - Known-bad tier: local SHA-256 hash lists, allowlist and user-supplied YARA rules.
 - Opt-in MalwareBazaar hash lookups (hash only, off by default).
@@ -31,6 +31,7 @@ All notable changes to ThreatWeaver. Format: [Keep a Changelog](https://keepacha
 - Training and inference used different feature definitions (179 of 256 training features were constant).
 - UI and API displayed fabricated data (invented families, similarity edges, attribution scores and timeline).
 - Documentation metrics that could not be traced to the shipped model; the "0% System32 FPR" figure reflected the signature bypass.
+- Dataset family counts double-counted samples (each appears twice in the EMBER2024 files); counts are now unique.
 
 ### Removed
 - `scanner/ember_extractor.py`, which claimed EMBER compatibility but was an approximation.

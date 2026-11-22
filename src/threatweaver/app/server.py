@@ -31,6 +31,25 @@ from threatweaver.scanner.scan_service import ScanService
 
 DEFAULT_PORT = 8765
 DEFAULT_CHECKPOINT = resource_path("artifacts/checkpoints/threatweaver_v1.pt")
+DEFAULT_BUNDLE = resource_path("artifacts/models/lgbm-v3-win64-dotnet")
+
+
+def resolve_detector_bundle(bundle_path: Optional[str | Path] = None, legacy: bool = False) -> Optional[Path]:
+    """Which v2 bundle to use: explicit --bundle, else the shipped Win64+.NET bundle when its
+    dependencies are installed, else None (legacy neural model). --legacy forces None."""
+    if legacy:
+        return None
+    if bundle_path:
+        return Path(bundle_path)
+    if not DEFAULT_BUNDLE.is_dir():
+        return None
+    try:
+        import lightgbm  # noqa: F401
+        import thrember  # noqa: F401
+    except ImportError:
+        print("[!] LightGBM detector unavailable (install the 'ember' extra); using the legacy model.")
+        return None
+    return DEFAULT_BUNDLE
 
 
 class ScanStateManager:
@@ -588,6 +607,7 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
     def _list_evals(self) -> Dict[str, Any]:
         """Evaluation artifacts (eval/1) available to chart; summaries only."""
         from threatweaver.models import signing
+        active_id = self._detector_info()["id"]
         out = []
         for eid, f in self._eval_files().items():
             try:
@@ -601,6 +621,7 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                 "file_types": (d.get("dataset") or {}).get("file_types"),
                 "test_roc_auc": test.get("roc_auc"), "test_tpr_at_fpr": test.get("tpr_at_fpr_curve"),
                 "n_test": test.get("n"), "signature": signing.verify_file(f).reason,
+                "active": eid == active_id,
             })
         return {"evals": out}
 
@@ -1062,12 +1083,14 @@ def create_server(
     checkpoint_path: Optional[str | Path] = None,
     bundle_path: Optional[str | Path] = None,
     backend: str = "fastapi",
+    legacy: bool = False,
 ) -> tuple[Any, str]:
     """Configures the ThreatWeaver server. backend: "fastapi" (uvicorn, default) or "stdlib".
 
     Both expose serve_forever() / shutdown() / server_close() / api_token and run the same
     endpoint logic (see threatweaver.app.api.ApiCore)."""
     ckpt = Path(checkpoint_path) if checkpoint_path else DEFAULT_CHECKPOINT
+    bundle_path = resolve_detector_bundle(bundle_path, legacy)
     try:
         migrate_legacy_vault()
     except Exception as e:  # noqa: BLE001 - never block start-up; legacy vault stays intact
@@ -1150,9 +1173,12 @@ def run_server(
     bundle_path: Optional[str | Path] = None,
     open_browser: bool = True,
     print_token: bool = False,
+    legacy: bool = False,
 ) -> None:
     """Launches the ThreatWeaver local HTTP server."""
-    server, url = create_server(host=host, port=port, checkpoint_path=checkpoint_path, bundle_path=bundle_path)
+    server, url = create_server(host=host, port=port, checkpoint_path=checkpoint_path, bundle_path=bundle_path,
+                                legacy=legacy)
+    print(f"Detector: {ThreatWeaverRequestHandler.engine.model_version}")
 
     print(f"\nThreatWeaver Apple Minimalist UI running at: {url}")
     if print_token:

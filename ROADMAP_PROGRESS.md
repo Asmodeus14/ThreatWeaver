@@ -16,20 +16,20 @@ Defaults chosen (change any time): React + TypeScript frontend · signature bypa
 - [x] 1.3 Ed25519 checkpoint signing, fail-closed loading
 - [x] 1.4 Quarantine fixes (symlink check order, exact critical-path prefixes, streaming XOR, manifest validation)
 - [x] 1.5 Cache keyed on sha256 + model version; scan `temp`/`cache` folders
-- [!] 1.6 Signature as evidence, not ML bypass — deliberately deferred until the Phase 3 model exists (removing the bypass now would expose the current model's ~19% System32 FPR)
+- [x] 1.6 Signature as evidence, not ML bypass — default detector is now LightGBM (policy v2: signature = evidence). The v0.1 model keeps its bypass only under explicit `--legacy`
 
 ## Phase 2 — Feature & evaluation foundation
 - [x] 2.1 Deterministic legacy features (replace `hash()`)
 - [x] 2.2 `thrember` integration (EMBER2024 v3, 2,568-D) with parity tests
-- [~] 2.3 Dataset pipeline — approved: Win64 + .NET train. Pipeline built & tested; download in progress
+- [x] 2.3 Dataset pipeline — Win64 + .NET train/test/challenge built (961,589 unique samples kept; splits capped, see log)
 - [x] 2.4 Sandboxed extraction worker pool (timeouts, memory caps)
 - [x] 2.5 Evaluation harness → `eval.json` single source of truth
 
 ## Phase 3 — Detection models
-- [~] 3.1 LightGBM primary detector, calibrated, FPR-targeted thresholds — .NET model done; Win64 pending download
+- [x] 3.1 LightGBM primary detector, calibrated, FPR-targeted thresholds — `lgbm-v3-win64-dotnet`, release-signed
 - [x] 3.2 ResMLP retrained on v3 features (comparison / embeddings) — LightGBM wins; no ensemble
 - [x] 3.3 Novelty v2 — Mahalanobis selected; challenge AUROC 0.79, unseen-family 0.59 → kept out of verdicts
-- [~] 3.4 Model bundle + verdict policy v2 — wired in, opt-in via `--bundle` until the Win64 model is validated
+- [x] 3.4 Model bundle + verdict policy v2 — default detector (`--legacy` for the v0.1 model)
 
 ## Phase 4 — Static analysis & evidence
 - [x] 4.1 TreeSHAP grouped explanations
@@ -60,7 +60,7 @@ Defaults chosen (change any time): React + TypeScript frontend · signature bypa
 - [x] 8.1 CI workflow (written; not yet run on GitHub — nothing pushed)
 - [x] 8.2 Malformed-PE fuzzing (112 cases × 2 engines)
 - [x] 8.3 Model regression gate
-- [ ] 8.4 Documentation refresh (waiting for the Win64 model's final numbers)
+- [x] 8.4 Documentation refresh (README, changelog, screenshots with the Win64 + .NET numbers)
 
 ## Log
 - 0.1: `.gitignore` rule `data/` → `/data/`; `src/threatweaver/data/` now shows as untracked (needs commit).
@@ -166,3 +166,17 @@ Defaults chosen (change any time): React + TypeScript frontend · signature bypa
   operating points, CIs). 3D "neural studio" (illustrative animation) remains in `/legacy` only. Reviewed via headless-
   Chrome screenshots in both themes; fixed overlapping threshold labels, duplicate rows, clipped graph labels, PR axis.
   Vitest + server tests; 210 Python tests pass.
+
+- 2.3/3.1/3.4/1.6 (2026-11-22): Win64_train downloaded (resumed after an out-of-memory stop; SHA-256 verified).
+  Dataset: metadata pass kept 961,589 unique Win64 + .NET samples (960,054 duplicate records dropped); splits capped
+  for RAM at train 300,000 / val 120,000 (last 8 weeks of train) / test 179,946 / challenge 1,643; 0 vectorisation
+  failures. Trained `lgbm-v3-win64-dotnet` (500 trees, 211 s). Test: ROC-AUC 0.9978, TPR@1% FPR 0.959, TPR@0.1% FPR
+  0.862. The gate correctly refused the automatic comparison (different test manifests), so both models were scored on
+  identical files: Win64 test TPR@1% 0.574 -> 0.968 and @0.1% 0.353 -> 0.886; .NET test 0.955 -> 0.938 and
+  0.835 -> 0.815 (a real, small regression); .NET challenge at review threshold 79.5% -> 79.3%; Win64 challenge
+  47.4% -> 39.8% (both weak). Realised FPR on .NET at the new thresholds is 1.64% / 0.15% (above the 1% / 0.1%
+  targets; Win64 0.69% / 0.09%). Model only, signatures off: 0 of 400 System32 .exe/.dll and 0 of 400 random Program
+  Files binaries flagged (the .NET model flagged 16% of System32 programs Suspicious). Promoted as default on the net
+  gain; trade-offs documented in the README. Family summary rerun with unique counting: 1,326,255 unique samples
+  (2,646,315 records), 2,059 families. The performance page now opens on the evaluation of the detector in use
+  (`active` flag in `/api/eval`).

@@ -16,12 +16,12 @@ ThreatWeaver inspects Portable Executable files as data (it never runs them), sc
 | Capability | Status | Notes |
 | :--- | :--- | :--- |
 | Zero-execution static parsing in isolated workers | Implemented | Per-file timeout and memory cap; crashes and hangs become *Analysis Error* |
-| LightGBM detector on EMBER2024 v3 features (2,568-D, official `thrember` extractor) | Implemented (opt-in, `--bundle`) | Current bundle is trained on .NET files only; a Win64 + .NET model is in progress |
+| LightGBM detector on EMBER2024 v3 features (2,568-D, official `thrember` extractor) | Implemented (default) | Trained on Win64 + .NET; needs the `ember` extra, otherwise the legacy model is used |
 | Calibrated thresholds (1% and 0.1% FPR on temporal validation) | Implemented | Drawn on the UI's verdict scale |
 | Per-file explanations (exact TreeSHAP) and static indicators | Implemented | Attributions explain the model, not the file's behaviour |
 | Known-bad tier: hash lists, allowlist, YARA | Implemented | No third-party rules bundled |
-| Authenticode / catalog verification | Implemented | Evidence for the v2 detector; still a bypass in the legacy path |
-| Legacy v0.1 neural model | Implemented (default until the Win64 model is validated) | Plain MLP on 256-D features; weak (see results) |
+| Authenticode / catalog verification | Implemented | Shown as evidence; the model always runs (the bypass remains only in `--legacy` mode) |
+| Legacy v0.1 neural model | Implemented (opt-in, `--legacy`) | Plain MLP on 256-D features; weak (see results) |
 | Novelty ("Unfamiliar") detection | Experimental | Separates evasive malware from benign (AUROC 0.79) but not unseen families (0.59); not used in v2 verdicts |
 | Observational folder watcher | Experimental | Alerts only; never blocks |
 | Opt-in MalwareBazaar hash lookups | Experimental | Off by default; hash only |
@@ -46,21 +46,30 @@ The interface opens on what needs attention. Each file's score is drawn against 
 
 ## Measured Results
 
-### v0.2 LightGBM detector (.NET), official EMBER2024 test split
+### v0.2 LightGBM detector (Win64 + .NET), official EMBER2024 test split
 
-Source: `artifacts/models/lgbm-v3-dotnet/eval.json`. 59,953 unique test files (30,000 malicious, 29,953 benign), all later in time than the training data; thresholds chosen on validation and applied unchanged.
+Source: `artifacts/models/lgbm-v3-win64-dotnet/eval.json`. 179,946 unique test files (90,000 malicious, 89,946 benign; 119,993 Win64 and 59,953 .NET), all later in time than the training data. Thresholds are chosen on a temporal validation split and applied unchanged.
 
-| Metric | Value (95% CI) |
-| :--- | :---: |
-| ROC-AUC | 0.9979 (0.9977–0.9981) |
-| Detection at 1% FPR | 95.5% (95.1–96.2%) |
-| Detection at 0.1% FPR | 83.5% (82.4–85.6%) |
-| Review threshold: detection / realised FPR | 95.5% / 0.99% |
-| High-confidence threshold: detection / realised FPR | 81.6% / 0.057% |
-| Evasive challenge set (.NET) caught at review threshold | 79.5% |
-| Model inference time | 0.016 ms per file (feature extraction dominates; see below) |
+| Metric | All test files (95% CI) | Win64 | .NET |
+| :--- | :---: | :---: | :---: |
+| ROC-AUC | 0.9978 (0.9977–0.9979) | 0.9981 | 0.9971 |
+| Detection at 1% FPR | 95.9% (95.7–96.1%) | 96.8% | 93.8% |
+| Detection at 0.1% FPR | 86.2% (85.1–87.1%) | 88.6% | 81.5% |
+| Review threshold: detection / realised FPR | 95.9% / 1.01% | 95.9% / 0.69% | 96.0% / 1.64% |
+| High-confidence threshold: detection / realised FPR | 86.8% / 0.11% | 88.3% / 0.09% | 83.8% / 0.15% |
+| Evasive challenge set caught at review threshold | 59.7% of 1,643 | 39.8% of 814 | 79.3% of 829 |
 
-This model is trained on .NET assemblies only and is not suitable for native Win32/Win64 executables: on signed System32 programs it labels none *Likely Malicious* but 16% *Suspicious*. A Win64 + .NET model is being trained.
+**Signed Windows software, model only (signature checks off):** none of 400 System32 `.exe`/`.dll` files and none of 400 randomly chosen Program Files binaries were flagged *Suspicious* or worse (measured 2026-11-22). The previous .NET-only model flagged 16% of System32 programs as *Suspicious*.
+
+**Compared with the .NET-only model on the same files:** on Win64, detection at 1% FPR rose from 57.4% to 96.8%, and at 0.1% FPR from 35.3% to 88.6%. On .NET it fell slightly, from 95.5% to 93.8% at 1% FPR and from 83.5% to 81.5% at 0.1% FPR.
+
+**Limitations**
+
+- Evasive Win64 malware (the EMBER2024 challenge set) is mostly missed: 39.8% is caught at the review threshold and 6.9% at the high-confidence threshold.
+- On .NET files the thresholds produce more false positives than their targets (1.64% and 0.15% instead of 1% and 0.1%), because they are tuned on Win64 and .NET together.
+- Splits were capped to fit in 15 GB of RAM: 300,000 training and 120,000 validation samples out of 961,589 unique Win64 + .NET samples.
+- The bundled `samples/` files are 1–2 KB synthetic stubs, not real programs. The detector scores three of them as *Likely Malicious*, including the one named `benign_utility.exe`; files this unusual are far from anything in the training data.
+- Scan time is dominated by parsing in isolated workers: median 266 ms per file, 95th percentile 1.75 s (on the System32 sample above). The model itself takes 0.08 ms per file.
 
 ### v0.1.0 legacy model (for comparison)
 
@@ -84,7 +93,7 @@ All values below come from files in `artifacts/`. Nothing here is a target or an
 **Important caveats**
 
 - The test split has only **750 samples spanning about 30 hours**, drawn from EMBER2024 *test* partitions (Win64 + .NET). The official EMBER2024 train partitions were not used. Treat these numbers as indicative, not as operational performance.
-- **System32 false positives:** signed Windows binaries are currently accepted by the Authenticode tier without running the model. With that tier disabled, the model scored 38 of 200 System32 `.exe` files (19%) at P(malware) ≥ 0.5 and labelled 65 (32.5%) "Unfamiliar" (measured 2026-11-21). The earlier "0% System32 FPR" figure reflected the signature bypass, not the model.
+- **System32 false positives:** in `--legacy` mode, signed Windows binaries are accepted by the Authenticode tier without running the model. With that tier disabled, the model scored 38 of 200 System32 `.exe` files (19%) at P(malware) ≥ 0.5 and labelled 65 (32.5%) "Unfamiliar" (measured 2026-11-21). The earlier "0% System32 FPR" figure reflected the signature bypass, not the model.
 - Cold scan latency measured at about **135 ms per file** on the System32 sample above (single process, includes parsing).
 
 ---
@@ -107,7 +116,7 @@ python -m venv .venv
 # Core install (CPU build of PyTorch)
 pip install --extra-index-url https://download.pytorch.org/whl/cpu -e ".[dev]"
 
-# Optional: v2 detector (EMBER2024 v3 features, LightGBM) and YARA rules
+# LightGBM detector (EMBER2024 v3 features; without it the legacy model is used) and optional YARA rules
 pip install -e ".[ember,rules]"
 
 # Exact, tested environment
@@ -121,9 +130,9 @@ pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requiremen
 ### Interface
 
 ```powershell
-threatweaver ui                                              # http://127.0.0.1:8765
-threatweaver ui --bundle artifacts/models/lgbm-v3-dotnet     # use the LightGBM (v2) detector
-threatweaver ui --print-token                                # print the API token for scripts
+threatweaver ui                    # http://127.0.0.1:8765, LightGBM detector
+threatweaver ui --legacy           # use the v0.1 neural model instead
+threatweaver ui --print-token      # print the API token for scripts
 ```
 
 The interface opens on what needs attention. Open any file to see its verdict, the calibrated score against the detector's real thresholds, what drove the score, static indicators, and actions (quarantine, label for learning). The classic v0.1 interface remains available at `/legacy`.
@@ -133,7 +142,7 @@ The API requires the per-session token (sent automatically by the UI). Scripts s
 ### Command line
 
 ```powershell
-threatweaver scan C:\Users\you\Downloads --bundle artifacts/models/lgbm-v3-dotnet --export-md scan.md
+threatweaver scan C:\Users\you\Downloads --export-md scan.md
 threatweaver quarantine suspicious_sample.exe --dry-run
 threatweaver quarantine suspicious_sample.exe
 threatweaver list-quarantine
@@ -161,7 +170,7 @@ The quarantine vault, scan history, cache, local model versions, keys and rules 
 ### Research workflow
 
 ```powershell
-python tools/download_ember2024.py --target Dot_Net_train           # SHA-256 verified
+python tools/download_ember2024.py --target Win64_train             # SHA-256 verified; also Dot_Net_train
 python tools/build_ember_v3_dataset.py --file-types Win64 Dot_Net
 python tools/train_lgbm.py --data-dir data/ember_v3 --name lgbm-v3
 python tools/train_lgbm.py ... --feedback labels.json --gate-against artifacts/models/lgbm-v3/eval.json

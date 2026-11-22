@@ -7,6 +7,8 @@ block_cipher = None
 datas = [
     ('assets/threatweaver.ico', 'assets'),
     ('artifacts/checkpoints/*', 'artifacts/checkpoints'),
+    ('artifacts/models/lgbm-v3-win64-dotnet/*', 'artifacts/models/lgbm-v3-win64-dotnet'),
+    ('artifacts/dataset/*.json', 'artifacts/dataset'),
     ('samples/*', 'samples'),
     ('src/threatweaver/models/trusted_keys/*.pub', 'threatweaver/models/trusted_keys'),
     ('src/threatweaver/app/static/v2/index.html', 'threatweaver/app/static/v2'),
@@ -18,6 +20,8 @@ hiddenimports = [
     'clr',
     'pythonnet',
     'pefile',
+    'lightgbm',
+    'thrember',
     'cryptography',
     'fastapi',
     'uvicorn',

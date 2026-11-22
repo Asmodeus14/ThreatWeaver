@@ -252,6 +252,8 @@ export interface EvalSummary {
   test_tpr_at_fpr: Record<string, number> | null;
   n_test: number | null;
   signature: string;
+  /** True for the evaluation of the detector currently in use. */
+  active?: boolean;
 }
 
 export interface EvalDetail {

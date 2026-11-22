@@ -25,6 +25,7 @@ from threatweaver.quarantine.manager import (
     SymlinkReparsePointError,
 )
 from threatweaver.reporting.report import ScanHistoryManager, ScanReport
+from threatweaver.app.server import resolve_detector_bundle
 from threatweaver.scanner.inference import InferenceEngine, ScanResult, ScanVerdict
 from threatweaver.scanner.scan_service import ScanService
 
@@ -72,7 +73,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
             enable_signature_verifier=not no_sig,
             enable_hash_cache=not no_cache,
             isolate_extraction=True,
-            bundle_path=getattr(args, "bundle", None),
+            bundle_path=resolve_detector_bundle(getattr(args, "bundle", None), getattr(args, "legacy", False)),
         )
     else:
         console.print(f"[green]Loading calibrated checkpoint: {ckpt_path.name}[/green]")
@@ -81,7 +82,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
             enable_signature_verifier=not no_sig,
             enable_hash_cache=not no_cache,
             isolate_extraction=True,
-            bundle_path=getattr(args, "bundle", None),
+            bundle_path=resolve_detector_bundle(getattr(args, "bundle", None), getattr(args, "legacy", False)),
         )
 
     if clear_cache:
@@ -454,6 +455,7 @@ def cmd_ui(args: argparse.Namespace) -> int:
         bundle_path=getattr(args, "bundle", None),
         open_browser=not args.no_browser,
         print_token=getattr(args, "print_token", False),
+        legacy=getattr(args, "legacy", False),
     )
     return 0
 
@@ -484,7 +486,8 @@ def main() -> None:
     p_ui.add_argument("--host", default="127.0.0.1", help="HTTP host bind address (default: 127.0.0.1)")
     p_ui.add_argument("--port", type=int, default=8765, help="HTTP port (default: 8765)")
     p_ui.add_argument("--checkpoint", default=None, help="Model checkpoint path")
-    p_ui.add_argument("--bundle", default=None, help="Signed LightGBM model bundle directory (v2 detector)")
+    p_ui.add_argument("--bundle", default=None, help="Signed LightGBM bundle directory (default: shipped Win64+.NET bundle)")
+    p_ui.add_argument("--legacy", action="store_true", help="Use the v0.1 neural model instead of the LightGBM detector")
     p_ui.add_argument("--no-browser", action="store_true", help="Do not automatically open browser")
     p_ui.add_argument("--print-token", action="store_true", help="Print the per-session API token for scripted access")
 
@@ -498,7 +501,8 @@ def main() -> None:
     p_scan = subparsers.add_parser("scan", help="Scan a file or directory for threats")
     p_scan.add_argument("path", help="Path to file or directory to scan")
     p_scan.add_argument("--checkpoint", default=None, help="Path to model checkpoint")
-    p_scan.add_argument("--bundle", default=None, help="Signed LightGBM model bundle directory (v2 detector)")
+    p_scan.add_argument("--bundle", default=None, help="Signed LightGBM bundle directory (default: shipped Win64+.NET bundle)")
+    p_scan.add_argument("--legacy", action="store_true", help="Use the v0.1 neural model instead of the LightGBM detector")
     p_scan.add_argument("--workers", type=int, default=4, help="Max worker threads")
     p_scan.add_argument("--all-files", action="store_true", help="Scan all files, not just PE extensions")
     p_scan.add_argument("--export-json", default=None, help="Save report to JSON file")
