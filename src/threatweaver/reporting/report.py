@@ -267,6 +267,49 @@ class ScanHistoryManager:
                 out.append(rec)
             return out
 
+    ATTENTION_VERDICTS = ("Known Malicious", "Likely Malicious", "Suspicious",
+                          "Unfamiliar / Out-of-Distribution", "Analysis Error")
+
+    def insights(self, model_id: Optional[str] = None, bins: int = 40, days: int = 30) -> Dict[str, Any]:
+        """Aggregates for the overview, from real scan history only.
+
+        Each file counts once, at its most recent verdict (keyed by SHA-256, else path).
+        `score_histogram` covers only files whose latest result came from `model_id`, so scores
+        from different detectors are never mixed. `daily` counts every result per scan day."""
+        latest_sql = (
+            "SELECT verdict, malware_probability, model_version FROM ("
+            " SELECT r.verdict, r.malware_probability, r.model_version, ROW_NUMBER() OVER ("
+            "  PARTITION BY COALESCE(NULLIF(r.sha256, ''), r.file_path) ORDER BY s.created DESC, r.idx DESC) AS rn"
+            " FROM results r JOIN scans s USING (scan_id)) WHERE rn = 1")
+        flagged = ",".join("?" * len(self.ATTENTION_VERDICTS))
+        daily_sql = (
+            "SELECT substr(s.timestamp, 1, 10) AS day, COUNT(*), "
+            f"SUM(CASE WHEN r.verdict IN ({flagged}) THEN 1 ELSE 0 END) "
+            "FROM results r JOIN scans s USING (scan_id) WHERE s.timestamp IS NOT NULL "
+            "GROUP BY day ORDER BY day DESC LIMIT ?")
+        counts: Dict[str, int] = {}
+        hist = [0] * bins
+        by_verdict: Dict[str, List[int]] = {}
+        hist_n = 0
+        with self._connect() as c:
+            for verdict, prob, mv in c.execute(latest_sql):
+                counts[verdict or "Unknown"] = counts.get(verdict or "Unknown", 0) + 1
+                unscored = verdict in ("Analysis Error", "Unsupported Format")  # no model score; never plot at 0%
+                if model_id and mv and not unscored and model_id in mv.replace("(", " ").split() and prob is not None:
+                    b = min(bins - 1, max(0, int(float(prob) * bins)))
+                    hist[b] += 1
+                    by_verdict.setdefault(verdict or "Unknown", [0] * bins)[b] += 1
+                    hist_n += 1
+            daily = [{"day": d, "scanned": n, "flagged": f or 0}
+                     for d, n, f in c.execute(daily_sql, (*self.ATTENTION_VERDICTS, int(days))).fetchall()]
+        return {
+            "unique_files": sum(counts.values()),
+            "verdict_counts": counts,
+            "score_histogram": {"model_id": model_id, "bins": bins, "counts": hist, "n": hist_n,
+                                "by_verdict": by_verdict},
+            "daily": list(reversed(daily)),
+        }
+
     def search_results(self, verdicts: Optional[List[str]] = None, text: Optional[str] = None,
                        limit: int = 200) -> List[Dict[str, Any]]:
         """Detections across all scans, newest first (for the Detections view)."""

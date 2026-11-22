@@ -38,3 +38,19 @@ describe("format", () => {
     expect(shortHash("a".repeat(64), 8)).toBe("aaaaaaaa…");
   });
 });
+
+import { zoneOf } from "../components/VerdictScale";
+
+describe("score zones follow the detector's real thresholds", () => {
+  const t = { low: 0.789, high: 0.9815, lowLabel: "", highLabel: "" };
+  it("places scores in the right zone, inclusive at each threshold", () => {
+    expect(zoneOf(0.5, t)).toBe("low");
+    expect(zoneOf(0.789, t)).toBe("review");
+    expect(zoneOf(0.95, t)).toBe("review");
+    expect(zoneOf(0.9815, t)).toBe("high");
+  });
+  it("has no high zone when both thresholds are equal (legacy model)", () => {
+    const legacy = { low: 0.3, high: 0.3, lowLabel: "", highLabel: "" };
+    expect(zoneOf(0.9, legacy)).toBe("review");
+  });
+});

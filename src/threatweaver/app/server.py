@@ -292,6 +292,8 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
             except ValueError:
                 limit = 200
             self._serve_json({"results": ScanHistoryManager().search_results(verdicts or None, text, limit)})
+        elif path == "/api/insights":
+            self._serve_json(ScanHistoryManager().insights(model_id=self._detector_info()["id"]))
         elif path == "/api/sample-details":
             sha = query.get("sha256", [""])[0] or query.get("id", [""])[0]
             self._serve_json(self._get_sample_details(sha))

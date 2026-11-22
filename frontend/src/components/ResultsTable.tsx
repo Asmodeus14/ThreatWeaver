@@ -1,6 +1,6 @@
 import type { ScanResultDto } from "../lib/api";
 import { thresholdsFrom, useStatus } from "../lib/detector";
-import { ms, pct } from "../lib/format";
+import { ms } from "../lib/format";
 import { verdictInfo } from "../lib/verdicts";
 import { Verdict } from "./Verdict";
 import { VerdictScale } from "./VerdictScale";
@@ -16,16 +16,18 @@ export function ResultsTable({
   showTime?: boolean;
   caption?: string;
 }) {
-  const thresholds = thresholdsFrom(useStatus());
+  const status = useStatus();
+  const thresholds = thresholdsFrom(status);
+  const activeId = status?.detector?.id;
   return (
     <div className="table-wrap">
-      <table>
+      <table className="results">
         {caption && <caption className="sr-only">{caption}</caption>}
         <thead>
           <tr>
             <th>File</th>
             <th>Verdict</th>
-            <th>Score</th>
+            <th className="score-col">Score</th>
             <th>Analysed by</th>
             {showTime && <th className="num">Time</th>}
           </tr>
@@ -55,16 +57,19 @@ export function ResultsTable({
                 </td>
                 <td>
                   {scored ? (
-                    <div className="row" style={{ flexWrap: "nowrap" }}>
-                      <VerdictScale micro score={r.malware_probability} thresholds={thresholds} />
-                      <span className="small">{pct(r.malware_probability)}</span>
-                    </div>
+                    <VerdictScale
+                      micro
+                      score={r.malware_probability}
+                      tone={v.tone}
+                      // Zones belong to the detector that set them; other models' scores get a plain track.
+                      thresholds={activeId && (r.model_version || "").split(/[\s()]+/).includes(activeId) ? thresholds : null}
+                    />
                   ) : (
                     <span className="muted small">—</span>
                   )}
                 </td>
-                <td className="small muted">{r.triage_stage ?? r.model_version.split(" ")[0]}</td>
-                {showTime && <td className="num small muted">{ms(r.scan_duration_ms)}</td>}
+                <td className="xs muted mono by-col">{r.triage_stage ?? (r.model_version ? r.model_version.split(" ")[0] : "—")}</td>
+                {showTime && <td className="num small muted time-col">{ms(r.scan_duration_ms)}</td>}
               </tr>
             );
           })}

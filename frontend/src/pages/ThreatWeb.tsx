@@ -23,7 +23,7 @@ export function ThreatWeb() {
       <div className="page-head">
         <div>
           <h1>Threat web</h1>
-          <p>The latest scan laid out by folder. Colour is the file's real verdict; edges connect files to their folder.</p>
+          <p>A live map of the latest scan. Files gather around their folder; colour appears only where a verdict needs attention.</p>
         </div>
         <div className="row">
           <div className="segmented" role="group" aria-label="Show">
@@ -54,17 +54,17 @@ export function ThreatWeb() {
             clean: files.filter((f) => f.state === "benign").length,
           };
           return (
-            <div className="grid-2" style={{ gridTemplateColumns: "1fr 300px" }}>
+            <div className="grid-2 web-layout">
               <div className="section">
                 <div className="panel" style={{ overflow: "hidden" }}>
-                  <ThreatWebCanvas items={n.fs_items} edges={n.fs_edges} filter={filter} onSelect={setSel} />
+                  <ThreatWebCanvas items={n.fs_items} edges={n.fs_edges} filter={filter} onSelect={setSel} height={620} />
                 </div>
                 <div className="legend">
                   <span><i className="box" style={{ background: "var(--danger)" }} />Flagged ({counts.flagged})</span>
                   <span><i className="box" style={{ background: "var(--novel)" }} />Unfamiliar ({counts.novel})</span>
-                  <span><i className="box" style={{ background: "var(--ok)" }} />Clean ({counts.clean})</span>
-                  <span><i className="box" style={{ background: "var(--ink)" }} />Folder</span>
-                  <span>Scroll to zoom, drag to pan, double-click to reset.</span>
+                  <span><i className="box" style={{ background: "var(--ink-3)" }} />Clean ({counts.clean})</span>
+                  <span><i className="box" style={{ background: "transparent", boxShadow: "inset 0 0 0 1.5px var(--ink)", borderRadius: "50%" }} />Folder</span>
+                  <span>Drag a node to move it, drag empty space to pan, scroll to zoom, double-click to fit.</span>
                 </div>
               </div>
               <aside className="panel panel-pad section" aria-live="polite">
@@ -93,7 +93,22 @@ export function ThreatWeb() {
                     )}
                   </>
                 ) : (
-                  <Empty title="Select a node">Click a file to see its verdict and evidence.</Empty>
+                  <>
+                    <h2>Latest scan</h2>
+                    <dl className="kv" style={{ gridTemplateColumns: "1fr auto" }}>
+                      <dt>Folders</dt>
+                      <dd className="mono">{n.fs_items.length - files.length}</dd>
+                      <dt>Files</dt>
+                      <dd className="mono">{files.length}</dd>
+                      <dt>Flagged</dt>
+                      <dd className="mono">{counts.flagged}</dd>
+                      <dt>Unfamiliar</dt>
+                      <dd className="mono">{counts.novel}</dd>
+                      <dt>Clean</dt>
+                      <dd className="mono">{counts.clean}</dd>
+                    </dl>
+                    <p className="small muted">Click a file or folder for its details. Drag nodes to pull clusters apart; double-click to fit everything.</p>
+                  </>
                 )}
               </aside>
             </div>

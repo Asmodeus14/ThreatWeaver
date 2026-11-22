@@ -32,9 +32,9 @@ ThreatWeaver inspects Portable Executable files as data (it never runs them), sc
 
 ## Interface
 
-The interface opens on what needs attention. Each file's score is drawn against the detector's real thresholds, with the evidence behind it.
+A black-and-white interface where colour appears only on verdicts that need attention. Each file's score is drawn against the detector's real thresholds, with the evidence behind it, and the latest scan can be explored as a live map.
 
-![Overview](assets/screenshots/v2_overview.png)
+![Scan in progress](assets/screenshots/v2_scan.png)
 
 ![Detection detail](assets/screenshots/v2_detection_detail.png)
 

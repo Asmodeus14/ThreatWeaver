@@ -285,3 +285,13 @@ export interface Ablation {
   results?: { summary_table: Record<string, string | number>[]; metadata: Record<string, unknown> };
   selection?: { selected_best_dimension: number };
 }
+
+export interface Insights {
+  /** Files in saved scan history, each counted once at its most recent verdict. */
+  unique_files: number;
+  verdict_counts: Record<string, number>;
+  /** Latest scores of files analysed by the active detector only. */
+  score_histogram: { model_id: string | null; bins: number; counts: number[]; n: number; by_verdict?: Record<string, number[]> };
+  /** Every result per scan day (most recent 30 days that had scans). */
+  daily: { day: string; scanned: number; flagged: number }[];
+}

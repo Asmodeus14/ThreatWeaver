@@ -2,7 +2,7 @@
 
 All notable changes to ThreatWeaver. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] — 0.2.0
+## [0.2.0] — 2026-11-22
 
 ### Security
 - Local API requires a per-session token; Host allow-list, Origin checks, no wildcard CORS, JSON-only bodies, 1 MiB cap and a path policy close cross-site and DNS-rebinding control of quarantine, restore, settings and learning endpoints.
@@ -23,6 +23,8 @@ All notable changes to ThreatWeaver. Format: [Keep a Changelog](https://keepacha
 - Gated retraining with analyst feedback and a model regression gate.
 - Evaluation harness (`eval.json`, bootstrap CIs, drift) and a continuity check reproducing the v0.1 numbers exactly.
 - New React + TypeScript interface (classic UI kept at `/legacy`), FastAPI server with an OpenAPI contract, SQLite scan history, per-user app-data directory.
+- Interface redesign: black-and-white, Apple-style minimal design in dark and light themes; colour only for verdicts that need attention. Collapsible icon sidebar, Ctrl+K command palette, verdict tally, score field and scan-activity charts from real history (`/api/insights`), a scan page with progress ring, rate and time remaining, and a clearer score gauge with labelled review and high-confidence zones.
+- Living threat web: a force-directed map of the latest scan that blooms out of its folders and can be dragged, flung, zoomed and focused; respects reduced-motion.
 - CI workflow, malformed-PE fuzz tests.
 
 ### Fixed

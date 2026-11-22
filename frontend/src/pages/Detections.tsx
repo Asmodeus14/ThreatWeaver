@@ -10,6 +10,8 @@ const FILTERS: { id: string; label: string; verdicts: string[] }[] = [
   { id: "attention", label: "Needs attention", verdicts: ["Known Malicious", "Likely Malicious", "Suspicious", "Unfamiliar / Out-of-Distribution", "Analysis Error"] },
   { id: "malicious", label: "Malicious", verdicts: ["Known Malicious", "Likely Malicious"] },
   { id: "suspicious", label: "Suspicious", verdicts: ["Suspicious"] },
+  { id: "unfamiliar", label: "Unfamiliar", verdicts: ["Unfamiliar / Out-of-Distribution"] },
+  { id: "clean", label: "Benign or trusted", verdicts: ["Likely Benign", "Trusted Signer"] },
   { id: "all", label: "All files", verdicts: [] },
 ];
 
@@ -25,7 +27,10 @@ function latestPerFile(rows: DetectionRow[]): ScanResultDto[] {
 
 export function Detections() {
   const route = useRoute();
-  const [filter, setFilter] = useState(route.params.get("q") || route.params.get("sha") ? "all" : "attention");
+  const wanted = route.params.get("filter");
+  const [filter, setFilter] = useState(
+    wanted && FILTERS.some((x) => x.id === wanted) ? wanted : route.params.get("q") || route.params.get("sha") ? "all" : "attention",
+  );
   const [text, setText] = useState(route.params.get("q") ?? route.params.get("sha") ?? "");
   const [query, setQuery] = useState(text);
   const [open, setOpen] = useState<ScanResultDto | null>(null);

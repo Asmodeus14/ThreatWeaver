@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { Copy, Lock, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { api, ScanResultDto } from "../lib/api";
 import { thresholdsFrom, useStatus } from "../lib/detector";
-import { bytes, ms, pct } from "../lib/format";
+import { bytes, ms } from "../lib/format";
 import { verdictInfo } from "../lib/verdicts";
 import { useToast } from "./Toast";
 import { Verdict } from "./Verdict";
@@ -76,22 +77,43 @@ export function DetectionDrawer({ result, onClose }: { result: ScanResultDto; on
       <aside className="drawer" role="dialog" aria-modal="true" aria-label={`Details for ${result.file_name}`}>
         <div className="row" style={{ justifyContent: "space-between" }}>
           <Verdict verdict={result.verdict} />
-          <button className="ghost" onClick={onClose} aria-label="Close details">
-            Close
+          <button className="icon-btn" onClick={onClose} aria-label="Close details" title="Close (Esc)">
+            <X />
           </button>
         </div>
         <div>
-          <h1 style={{ wordBreak: "break-all" }}>{result.file_name}</h1>
-          <p className="muted small mono" style={{ wordBreak: "break-all" }}>
+          <h1 style={{ wordBreak: "break-all", fontSize: "var(--fs-xl)" }}>{result.file_name}</h1>
+          <p className="muted xs mono" style={{ wordBreak: "break-all", marginTop: 6 }}>
             {result.file_path}
           </p>
+        </div>
+        <div className="row">
+          <button className="danger" disabled={busy} onClick={quarantine}>
+            <Lock aria-hidden="true" />
+            Quarantine file
+          </button>
+          <button disabled={busy} onClick={() => queue(1)}>
+            <ThumbsDown aria-hidden="true" />
+            Label malicious
+          </button>
+          <button disabled={busy} onClick={() => queue(0)}>
+            <ThumbsUp aria-hidden="true" />
+            Label benign
+          </button>
+          <button
+            className="ghost"
+            onClick={() => navigator.clipboard?.writeText(result.sha256).then(() => toast("SHA-256 copied."))}
+          >
+            <Copy aria-hidden="true" />
+            Copy SHA-256
+          </button>
         </div>
 
         {hasScore && (
           <section className="section">
             <div className="section-head">
-              <h2>Model score {pct(result.malware_probability)}</h2>
-              <span className="hint">{status?.detector?.id}</span>
+              <h2>Where this file scores</h2>
+              <span className="hint mono">{status?.detector?.id}</span>
             </div>
             <VerdictScale score={result.malware_probability} thresholds={thresholds} />
           </section>
@@ -197,23 +219,6 @@ export function DetectionDrawer({ result, onClose }: { result: ScanResultDto; on
           </dl>
         </section>
 
-        <div className="row">
-          <button className="danger" disabled={busy} onClick={quarantine}>
-            Quarantine file
-          </button>
-          <button disabled={busy} onClick={() => queue(1)}>
-            Queue as malicious
-          </button>
-          <button disabled={busy} onClick={() => queue(0)}>
-            Queue as benign
-          </button>
-          <button
-            className="ghost"
-            onClick={() => navigator.clipboard?.writeText(result.sha256).then(() => toast("SHA-256 copied."))}
-          >
-            Copy SHA-256
-          </button>
-        </div>
       </aside>
     </>
   );

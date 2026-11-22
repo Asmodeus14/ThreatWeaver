@@ -131,6 +131,7 @@ GET_PATHS: List[Tuple[str, str]] = [
     ("/api/eval", "Evaluation artifacts (eval/1) available for charts"),
     ("/api/eval/detail", "One evaluation artifact (?id=)"),
     ("/api/detections", "Results across all scans (?verdict=&q=&limit=)"),
+    ("/api/insights", "Overview aggregates from scan history: verdict counts, score distribution, daily activity"),
     ("/api/watch", "Observational folder watcher status and recent results"),
 ]
 
