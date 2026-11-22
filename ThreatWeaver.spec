@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_data_files
+
 block_cipher = None
 
 datas = [
@@ -14,6 +16,9 @@ datas = [
     ('src/threatweaver/app/static/v2/index.html', 'threatweaver/app/static/v2'),
     ('src/threatweaver/app/static/v2/assets/*', 'threatweaver/app/static/v2/assets'),
 ]
+# Data files the EMBER v3 extractor needs at import time (Authenticode trust store and parsers).
+for pkg in ('mscerts', 'signify', 'thrember', 'lightgbm'):
+    datas += collect_data_files(pkg)
 
 hiddenimports = [
     'webview',
