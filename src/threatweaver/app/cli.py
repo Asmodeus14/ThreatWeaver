@@ -25,6 +25,7 @@ from threatweaver.quarantine.manager import (
     SymlinkReparsePointError,
 )
 from threatweaver.reporting.report import ScanHistoryManager, ScanReport
+from threatweaver.app.server import resolve_detector_bundle
 from threatweaver.scanner.inference import InferenceEngine, ScanResult, ScanVerdict
 from threatweaver.scanner.scan_service import ScanService
 
@@ -71,6 +72,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
             checkpoint_path=None,
             enable_signature_verifier=not no_sig,
             enable_hash_cache=not no_cache,
+            isolate_extraction=True,
+            bundle_path=resolve_detector_bundle(getattr(args, "bundle", None), getattr(args, "legacy", False)),
         )
     else:
         console.print(f"[green]Loading calibrated checkpoint: {ckpt_path.name}[/green]")
@@ -78,6 +81,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
             checkpoint_path=ckpt_path,
             enable_signature_verifier=not no_sig,
             enable_hash_cache=not no_cache,
+            isolate_extraction=True,
+            bundle_path=resolve_detector_bundle(getattr(args, "bundle", None), getattr(args, "legacy", False)),
         )
 
     if clear_cache:
@@ -125,8 +130,14 @@ def cmd_scan(args: argparse.Namespace) -> int:
 
     for r in report.results:
         # Verdict color coding
-        if r.verdict == ScanVerdict.SUSPICIOUS:
-            verdict_style = "[bold red]SUSPICIOUS[/bold red]"
+        if r.verdict == ScanVerdict.KNOWN_MALICIOUS:
+            verdict_style = "[bold white on red]KNOWN MALICIOUS[/bold white on red]"
+        elif r.verdict == ScanVerdict.LIKELY_MALICIOUS:
+            verdict_style = "[bold red]LIKELY MALICIOUS[/bold red]"
+        elif r.verdict == ScanVerdict.TRUSTED_SIGNER:
+            verdict_style = "[green]Trusted Signer[/green]"
+        elif r.verdict == ScanVerdict.SUSPICIOUS:
+            verdict_style = "[bold yellow]SUSPICIOUS[/bold yellow]"
         elif r.verdict == ScanVerdict.UNFAMILIAR:
             verdict_style = "[bold magenta]UNFAMILIAR[/bold magenta]"
         elif r.verdict == ScanVerdict.LIKELY_BENIGN:
@@ -146,8 +157,10 @@ def cmd_scan(args: argparse.Namespace) -> int:
             triage_badge = "[green]🛡️ Signed[/green]"
         elif r.verdict == ScanVerdict.UNSUPPORTED:
             triage_badge = "[yellow]Format[/yellow]"
+        elif "LightGBM" in r.model_version:
+            triage_badge = "[magenta]LightGBM[/magenta]"
         else:
-            triage_badge = "[magenta]🧠 ResMLP[/magenta]"
+            triage_badge = "[magenta]Neural (legacy)[/magenta]"
 
         table.add_row(r.file_name, verdict_style, triage_badge, prob_str, short_sha, evidence_text)
 
@@ -158,7 +171,9 @@ def cmd_scan(args: argparse.Namespace) -> int:
     summary_text = (
         f"[bold]Total Files Scanned:[/bold] {s.total_scanned} in {report.duration_seconds}s\n"
         f"[green]Likely Benign:[/green] {s.likely_benign}  |  "
-        f"[red]Suspicious:[/red] {s.suspicious}  |  "
+        f"[green]Trusted Signer:[/green] {s.trusted_signer}  |  "
+        f"[bold red]Known/Likely Malicious:[/bold red] {s.known_malicious + s.likely_malicious}  |  "
+        f"[yellow]Suspicious:[/yellow] {s.suspicious}  |  "
         f"[magenta]Unfamiliar / OOD:[/magenta] {s.unfamiliar}  |  "
         f"[yellow]Unsupported:[/yellow] {s.unsupported}  |  "
         f"[dim]Errors:[/dim] {s.analysis_errors}"
@@ -178,7 +193,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
         console.print(f"[green]Exported Markdown report to: {p_md}[/green]")
 
     # If suspicious files exist and interactive mode is enabled, prompt user
-    suspicious_files = [r for r in report.results if r.verdict == ScanVerdict.SUSPICIOUS]
+    flagged = (ScanVerdict.KNOWN_MALICIOUS, ScanVerdict.LIKELY_MALICIOUS, ScanVerdict.SUSPICIOUS)
+    suspicious_files = [r for r in report.results if r.verdict in flagged]
     if suspicious_files and not args.no_prompt:
         console.print(f"\n[bold yellow]Found {len(suspicious_files)} suspicious file(s).[/bold yellow]")
         if Confirm.ask("Would you like to quarantine these suspicious files into the isolated vault?"):
@@ -384,7 +400,7 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
 
 
 def cmd_verify_checkpoint(args: argparse.Namespace) -> int:
-    """Verifies cryptographic HMAC signature and integrity of a model checkpoint."""
+    """Verifies the Ed25519 signature and integrity of a model checkpoint."""
     from threatweaver.models.classifier import verify_checkpoint_file
 
     target_ckpt = Path(args.path).resolve()
@@ -394,8 +410,11 @@ def cmd_verify_checkpoint(args: argparse.Namespace) -> int:
         console.print(f"[bold red]Error: Checkpoint file not found: {target_ckpt}[/bold red]")
         return 1
 
+    from threatweaver.models import signing
+    import hashlib
+
     valid, reason = verify_checkpoint_file(target_ckpt)
-    sig_path = target_ckpt.with_suffix(".pt.sig")
+    sig_path = signing.signature_path(target_ckpt)
 
     table = Table(title="Model Checkpoint Integrity Check", border_style="cyan")
     table.add_column("Property", style="bold white", width=22)
@@ -404,8 +423,14 @@ def cmd_verify_checkpoint(args: argparse.Namespace) -> int:
     table.add_row("Checkpoint Path", str(target_ckpt))
     table.add_row("File Size", f"{target_ckpt.stat().st_size / 1024:.1f} KB")
     table.add_row("Signature File", str(sig_path) if sig_path.exists() else "Missing (Unsigned)")
+    table.add_row("File SHA-256", hashlib.sha256(target_ckpt.read_bytes()).hexdigest())
     if sig_path.exists():
-        table.add_row("HMAC-SHA256 Hash", sig_path.read_text(encoding="utf-8").strip())
+        try:
+            import json as _json
+            rec = _json.loads(sig_path.read_text(encoding="utf-8"))
+            table.add_row("Signer Key / Role", f"{rec.get('key_id')} ({rec.get('role')})")
+        except Exception:
+            table.add_row("Signer Key / Role", "unreadable")
     table.add_row(
         "Verification Status",
         "[bold green]AUTHENTIC & VALID[/bold green]" if valid and sig_path.exists() else (
@@ -423,10 +448,15 @@ def cmd_ui(args: argparse.Namespace) -> int:
     from threatweaver.app.server import run_server
     host = getattr(args, "host", "127.0.0.1")
     console.print(f"[bold cyan]Launching ThreatWeaver Apple Minimalist UI on http://{host}:{args.port}...[/bold cyan]")
-    try:
-        run_server(host=host, port=args.port, checkpoint_path=args.checkpoint, open_browser=not args.no_browser)
-    except TypeError:
-        run_server(port=args.port, checkpoint_path=args.checkpoint, open_browser=not args.no_browser)
+    run_server(
+        host=host,
+        port=args.port,
+        checkpoint_path=args.checkpoint,
+        bundle_path=getattr(args, "bundle", None),
+        open_browser=not args.no_browser,
+        print_token=getattr(args, "print_token", False),
+        legacy=getattr(args, "legacy", False),
+    )
     return 0
 
 
@@ -441,6 +471,8 @@ def cmd_desktop(args: argparse.Namespace) -> int:
 
 def main() -> None:
     """CLI entry point for ThreatWeaver."""
+    import multiprocessing
+    multiprocessing.freeze_support()  # spawned parsing workers must not re-run the CLI when frozen
     print_banner()
 
     parser = argparse.ArgumentParser(
@@ -454,7 +486,10 @@ def main() -> None:
     p_ui.add_argument("--host", default="127.0.0.1", help="HTTP host bind address (default: 127.0.0.1)")
     p_ui.add_argument("--port", type=int, default=8765, help="HTTP port (default: 8765)")
     p_ui.add_argument("--checkpoint", default=None, help="Model checkpoint path")
+    p_ui.add_argument("--bundle", default=None, help="Signed LightGBM bundle directory (default: shipped Win64+.NET bundle)")
+    p_ui.add_argument("--legacy", action="store_true", help="Use the v0.1 neural model instead of the LightGBM detector")
     p_ui.add_argument("--no-browser", action="store_true", help="Do not automatically open browser")
+    p_ui.add_argument("--print-token", action="store_true", help="Print the per-session API token for scripted access")
 
     # app / desktop subcommand
     p_app = subparsers.add_parser("app", help="Launch the ThreatWeaver Windows Desktop Application")
@@ -466,6 +501,8 @@ def main() -> None:
     p_scan = subparsers.add_parser("scan", help="Scan a file or directory for threats")
     p_scan.add_argument("path", help="Path to file or directory to scan")
     p_scan.add_argument("--checkpoint", default=None, help="Path to model checkpoint")
+    p_scan.add_argument("--bundle", default=None, help="Signed LightGBM bundle directory (default: shipped Win64+.NET bundle)")
+    p_scan.add_argument("--legacy", action="store_true", help="Use the v0.1 neural model instead of the LightGBM detector")
     p_scan.add_argument("--workers", type=int, default=4, help="Max worker threads")
     p_scan.add_argument("--all-files", action="store_true", help="Scan all files, not just PE extensions")
     p_scan.add_argument("--export-json", default=None, help="Save report to JSON file")
@@ -479,7 +516,7 @@ def main() -> None:
     p_quar = subparsers.add_parser("quarantine", help="Safely isolate a file to vault")
     p_quar.add_argument("path", help="Path of file to quarantine")
     p_quar.add_argument("--reason", default="Manual isolation", help="Reason for quarantine")
-    p_quar.add_argument("--vault", default="quarantine_store", help="Quarantine directory")
+    p_quar.add_argument("--vault", default=None, help="Quarantine directory (default: %%LOCALAPPDATA%%\\ThreatWeaver\\quarantine)")
     p_quar.add_argument("--dry-run", action="store_true", help="Perform checks without moving file")
     p_quar.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
 
@@ -487,14 +524,14 @@ def main() -> None:
     p_rest = subparsers.add_parser("restore", help="Restore an isolated file from vault")
     p_rest.add_argument("quarantine_id", help="Quarantine record ID to restore")
     p_rest.add_argument("--dest", default=None, help="Optional alternative restore destination")
-    p_rest.add_argument("--vault", default="quarantine_store", help="Quarantine directory")
+    p_rest.add_argument("--vault", default=None, help="Quarantine directory (default: %%LOCALAPPDATA%%\\ThreatWeaver\\quarantine)")
     p_rest.add_argument("--overwrite", action="store_true", help="Overwrite destination if present")
     p_rest.add_argument("--dry-run", action="store_true", help="Perform checks without restoring")
     p_rest.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
 
     # list-quarantine subcommand
     p_lsq = subparsers.add_parser("list-quarantine", help="List all quarantined files")
-    p_lsq.add_argument("--vault", default="quarantine_store", help="Quarantine directory")
+    p_lsq.add_argument("--vault", default=None, help="Quarantine directory (default: %%LOCALAPPDATA%%\\ThreatWeaver\\quarantine)")
 
     # history subcommand
     subparsers.add_parser("history", help="Show past scan sessions")

@@ -20,6 +20,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from threatweaver import __version__
+from threatweaver.app import security
+from threatweaver.core.paths import migrate_legacy_vault, resource_path
+from threatweaver.app.security import PathPolicyError
 from threatweaver.quarantine.manager import QuarantineManager
 from threatweaver.learning.adaptation_service import AdaptationService
 from threatweaver.reporting.report import ScanHistoryManager, ScanReport
@@ -27,7 +30,26 @@ from threatweaver.scanner.inference import InferenceEngine, ScanResult, ScanVerd
 from threatweaver.scanner.scan_service import ScanService
 
 DEFAULT_PORT = 8765
-DEFAULT_CHECKPOINT = Path("artifacts/checkpoints/threatweaver_v1.pt")
+DEFAULT_CHECKPOINT = resource_path("artifacts/checkpoints/threatweaver_v1.pt")
+DEFAULT_BUNDLE = resource_path("artifacts/models/lgbm-v3-win64-dotnet")
+
+
+def resolve_detector_bundle(bundle_path: Optional[str | Path] = None, legacy: bool = False) -> Optional[Path]:
+    """Which v2 bundle to use: explicit --bundle, else the shipped Win64+.NET bundle when its
+    dependencies are installed, else None (legacy neural model). --legacy forces None."""
+    if legacy:
+        return None
+    if bundle_path:
+        return Path(bundle_path)
+    if not DEFAULT_BUNDLE.is_dir():
+        return None
+    try:
+        import lightgbm  # noqa: F401
+        import thrember  # noqa: F401
+    except ImportError:
+        print("[!] LightGBM detector unavailable (install the 'ember' extra); using the legacy model.")
+        return None
+    return DEFAULT_BUNDLE
 
 
 class ScanStateManager:
@@ -45,6 +67,7 @@ class ScanStateManager:
         self.last_report: Optional[ScanReport] = None
         self._scan_thread: Optional[threading.Thread] = None
         self.target_path: str = ""
+        self.scan_seq: int = 0
         self.is_full_system: bool = False
 
     def start_scan(self, target_path: str, only_pe_extensions: bool = True) -> bool:
@@ -60,6 +83,7 @@ class ScanStateManager:
             self.current_file = ""
             self.results = []
             self.last_report = None
+            self.scan_seq += 1
 
         def worker():
             def on_prog(cur: int, tot: int, fn: str):
@@ -96,10 +120,48 @@ class ScanStateManager:
         with self.lock:
             self.is_scanning = False
 
+    def get_events(self, since: int, seq: Optional[int], max_items: int = 250) -> Dict[str, Any]:
+        """Incremental progress: only results the client has not seen yet (cursor = index).
+
+        Replaces re-sending up to 500 results on every poll. If the client's `seq` refers to an
+        older scan, the cursor resets to 0.
+        """
+        with self.lock:
+            if seq != self.scan_seq:
+                since = 0
+            since = max(0, min(int(since), len(self.results)))
+            chunk = self.results[since:since + max_items]
+            return {
+                "scan_seq": self.scan_seq,
+                "is_scanning": self.is_scanning,
+                "completed": self.completed_count,
+                "total": self.total_count,
+                "current_file": self.current_file,
+                "is_full_system": self.is_full_system,
+                "target_path": self.target_path,
+                "results_count": len(self.results),
+                "next": since + len(chunk),
+                "new_results": [self._serialize(r) for r in chunk],
+            }
+
+    @staticmethod
+    def _serialize(r: ScanResult) -> Dict[str, Any]:
+        mv = r.model_version
+        triage = "Cache" if "Cached" in mv else ("Authenticode" if "Authenticode" in mv else ("LightGBM" if "LightGBM" in mv else "Neural"))
+        return {
+            "file_path": r.file_path, "file_name": r.file_name, "file_size_bytes": r.file_size_bytes,
+            "sha256": r.sha256, "verdict": r.verdict.value, "malware_probability": round(r.malware_probability, 4),
+            "novelty_score": round(r.novelty_score, 4), "is_novel": r.is_novel, "evidence_points": r.evidence_points,
+            "scan_duration_ms": round(r.scan_duration_ms, 2), "model_version": r.model_version, "triage_stage": triage,
+            "nearest_known_cluster": r.nearest_known_cluster, "warning_message": r.warning_message,
+            "explanation": r.explanation,
+        }
+
     def get_status(self) -> Dict[str, Any]:
         with self.lock:
             def serialize_r(r: ScanResult) -> Dict[str, Any]:
-                triage = "Cache" if "Cached" in r.model_version else ("Authenticode" if "Authenticode" in r.model_version else "ResMLP")
+                mv = r.model_version
+                triage = "Cache" if "Cached" in mv else ("Authenticode" if "Authenticode" in mv else ("LightGBM" if "LightGBM" in mv else "Neural"))
                 return {
                     "file_path": r.file_path,
                     "file_name": r.file_name,
@@ -115,6 +177,7 @@ class ScanStateManager:
                     "triage_stage": triage,
                     "nearest_known_cluster": r.nearest_known_cluster,
                     "warning_message": r.warning_message,
+                    "explanation": r.explanation,
                 }
 
             latest = serialize_r(self.results[-1]) if self.results else None
@@ -148,13 +211,26 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
     engine: InferenceEngine
     quarantine_mgr: QuarantineManager
     adaptation_svc: Optional[AdaptationService] = None
+    api_token: str = ""
+    allowed_host_set: set = set()
+
+    def _reject_if_unauthorized(self, method: str, path: str) -> bool:
+        """Applies Host/Origin/token/body checks. Returns True if the request was rejected."""
+        verdict = security.guard_request(method, path, self.headers, self.api_token, self.allowed_host_set)
+        if verdict is None:
+            return False
+        status, reason = verdict
+        self._serve_json({"error": reason}, status=HTTPStatus(status))
+        return True
 
     def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+        if self._reject_if_unauthorized("GET", path):
+            return
         query = urllib.parse.parse_qs(parsed.query)
 
-        if path in ("/", "/index.html"):
+        if path in ("/", "/index.html", "/legacy"):
             self._serve_html_ui()
         elif path == "/api/status":
             self._serve_json(self._get_system_status())
@@ -162,6 +238,15 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
             self._serve_json(self._get_browse_paths())
         elif path == "/api/scan/progress":
             self._serve_json(self.state_mgr.get_status())
+        elif path == "/api/scan/events":
+            try:
+                since = int(query.get("since", ["0"])[0])
+                seq_raw = query.get("seq", [""])[0]
+                seq = int(seq_raw) if seq_raw else None
+            except ValueError:
+                self._serve_json({"error": "since and seq must be integers"}, status=HTTPStatus.BAD_REQUEST)
+                return
+            self._serve_json(self.state_mgr.get_events(since, seq))
         elif path == "/api/history":
             history = ScanHistoryManager().load_history()
             self._serve_json({"history": history})
@@ -193,6 +278,22 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                 "pending_count": len(self.adaptation_svc.queue.get_pending()),
                 "last_report": self.adaptation_svc.last_adaptation_report,
             })
+        elif path == "/api/watch":
+            self._serve_json(self._watch_status())
+        elif path == "/api/eval":
+            self._serve_json(self._list_evals())
+        elif path == "/api/eval/detail":
+            self._serve_json(*self._eval_detail(query.get("id", [""])[0]))
+        elif path == "/api/detections":
+            verdicts = [v for v in query.get("verdict", []) if v]
+            text = (query.get("q", [""])[0] or "").strip()[:200] or None
+            try:
+                limit = max(1, min(1000, int(query.get("limit", ["200"])[0])))
+            except ValueError:
+                limit = 200
+            self._serve_json({"results": ScanHistoryManager().search_results(verdicts or None, text, limit)})
+        elif path == "/api/insights":
+            self._serve_json(ScanHistoryManager().insights(model_id=self._detector_info()["id"]))
         elif path == "/api/sample-details":
             sha = query.get("sha256", [""])[0] or query.get("id", [""])[0]
             self._serve_json(self._get_sample_details(sha))
@@ -202,7 +303,18 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+        if self._reject_if_unauthorized("POST", path):
+            return
         body = self._read_json_body()
+        if body is None:
+            self._serve_json({"error": "Request body must be a JSON object."}, status=HTTPStatus.BAD_REQUEST)
+            return
+        try:
+            self._dispatch_post(path, body)
+        except PathPolicyError as e:
+            self._serve_json({"error": str(e)}, status=HTTPStatus.BAD_REQUEST)
+
+    def _dispatch_post(self, path: str, body: Dict[str, Any]) -> None:
 
         if path == "/api/scan":
             raw_target = str(body.get("target_path", ".")).strip().strip("'\"")
@@ -212,10 +324,7 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                 target_str = "FULL_SYSTEM"
                 target_display = "Full System (All Drives)"
             else:
-                target_p = Path(raw_target).expanduser().resolve()
-                if not target_p.exists():
-                    self._serve_json({"error": f"Path not found on disk: '{target_p}'"}, status=HTTPStatus.NOT_FOUND)
-                    return
+                target_p = security.validate_user_path(raw_target, must_exist=True)
                 target_str = str(target_p)
                 target_display = str(target_p)
             only_pe = not body.get("all_files", False)
@@ -229,12 +338,9 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
             self._serve_json({"status": "cancelled"})
 
         elif path == "/api/quarantine":
-            file_p = body.get("file_path")
-            reason = body.get("reason", "Manual isolation from UI")
-            dry_run = body.get("dry_run", False)
-            if not file_p:
-                self._serve_json({"error": "file_path is required"}, status=HTTPStatus.BAD_REQUEST)
-                return
+            file_p = str(security.validate_user_path(body.get("file_path"), must_exist=True))
+            reason = str(body.get("reason", "Manual isolation from UI"))[:500]
+            dry_run = bool(body.get("dry_run", False))
             try:
                 entry = self.quarantine_mgr.quarantine_file(file_p, reason=reason, dry_run=dry_run)
                 self._serve_json({"status": "success", "entry": entry.__dict__})
@@ -242,11 +348,8 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                 self._serve_json({"error": str(e)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
         elif path == "/api/restore":
-            qid = body.get("quarantine_id")
-            dry_run = body.get("dry_run", False)
-            if not qid:
-                self._serve_json({"error": "quarantine_id is required"}, status=HTTPStatus.BAD_REQUEST)
-                return
+            qid = security.validate_quarantine_id(body.get("quarantine_id"))
+            dry_run = bool(body.get("dry_run", False))
             try:
                 restored = self.quarantine_mgr.restore_file(qid, dry_run=dry_run)
                 self._serve_json({"status": "success", "restored_path": str(restored)})
@@ -255,10 +358,10 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
 
         elif path == "/api/learning/prototype":
             self._ensure_adaptation_svc()
-            file_p = body.get("file_path")
+            file_p = str(security.validate_user_path(body.get("file_path"), must_exist=True))
             lbl = int(body.get("label", 1))
-            family = str(body.get("family_name", "UserVariant"))
-            persist = bool(body.get("persist", True))
+            family = str(body.get("family_name", "UserVariant"))[:120]
+            persist = bool(body.get("persist", False))
             if not file_p:
                 self._serve_json({"error": "file_path is required"}, status=HTTPStatus.BAD_REQUEST)
                 return
@@ -275,9 +378,9 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
 
         elif path == "/api/learning/queue":
             self._ensure_adaptation_svc()
-            file_p = body.get("file_path")
+            file_p = str(security.validate_user_path(body.get("file_path"), must_exist=True))
             lbl = int(body.get("label", 1))
-            family = str(body.get("family_name", ""))
+            family = str(body.get("family_name", ""))[:120]
             verdict = str(body.get("detected_verdict", "Unfamiliar"))
             novelty = float(body.get("novelty_score", 0.0))
             if not file_p:
@@ -305,7 +408,7 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
             epochs = int(body.get("epochs", 5))
             lr = float(body.get("lr", 0.0003))
             replay_count = int(body.get("replay_count", 30))
-            persist = bool(body.get("persist", True))
+            persist = bool(body.get("persist", False))
             try:
                 res = self.adaptation_svc.run_continual_adaptation(
                     epochs=epochs,
@@ -316,6 +419,25 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                 self._serve_json(res)
             except Exception as e:
                 self._serve_json({"error": str(e)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
+        elif path == "/api/watch":
+            action = str(body.get("action", ""))
+            if action == "start":
+                folder = security.validate_user_path(body.get("path"), must_exist=True)
+                if not folder.is_dir():
+                    self._serve_json({"error": "Choose a folder to watch."}, status=HTTPStatus.BAD_REQUEST)
+                    return
+                self._watch_stop()
+                from threatweaver.scanner.watcher import RealtimeFileWatcher
+                w = RealtimeFileWatcher(watch_directory=folder, inference_engine=self.engine)
+                w.start()
+                ThreatWeaverRequestHandler.watcher = w
+            elif action == "stop":
+                self._watch_stop()
+            else:
+                self._serve_json({"error": "action must be 'start' or 'stop'"}, status=HTTPStatus.BAD_REQUEST)
+                return
+            self._serve_json(self._watch_status())
 
         elif path == "/api/settings":
             thresh = body.get("novelty_threshold")
@@ -332,6 +454,12 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                 self.engine.hash_cache.enabled = bool(enable_cache)
             if body.get("clear_cache", False) and hasattr(self.engine, "hash_cache"):
                 self.engine.hash_cache.clear()
+            from threatweaver.detectors import threat_intel
+            if "intel_enabled" in body or body.get("intel_api_key"):
+                key = body.get("intel_api_key")
+                threat_intel.save_config(bool(body.get("intel_enabled", threat_intel.load_config().get("enabled"))),
+                                         str(key)[:200] if key else None)
+            intel_cfg = threat_intel.load_config()
             self._serve_json({
                 "status": "success",
                 "settings": {
@@ -340,6 +468,8 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                     "enable_signature_verifier": getattr(self.engine.signature_verifier, "enabled", False),
                     "enable_hash_cache": getattr(self.engine.hash_cache, "enabled", False),
                     "cached_entries": getattr(self.engine.hash_cache, "count", lambda: 0)(),
+                    "intel_enabled": bool(intel_cfg.get("enabled")),
+                    "intel_has_api_key": bool(intel_cfg.get("has_api_key")),
                 }
             })
 
@@ -354,6 +484,8 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
     def do_DELETE(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+        if self._reject_if_unauthorized("DELETE", path):
+            return
         query = urllib.parse.parse_qs(parsed.query)
 
         if path == "/api/learning/queue":
@@ -368,29 +500,35 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
         else:
             self.send_error(HTTPStatus.NOT_FOUND, "Endpoint not found")
 
-    def _read_json_body(self) -> Dict[str, Any]:
+    def _read_json_body(self) -> Optional[Dict[str, Any]]:
+        """Reads a JSON object body (size already capped by the request guard). None if malformed."""
         try:
             length = int(self.headers.get("Content-Length", 0))
-            if length > 0:
-                raw = self.rfile.read(length).decode("utf-8")
-                return json.loads(raw)
+        except ValueError:
+            return None
+        if length <= 0:
+            return {}
+        try:
+            data = json.loads(self.rfile.read(min(length, security.MAX_BODY_BYTES)).decode("utf-8"))
         except Exception:
-            pass
-        return {}
+            return None
+        return data if isinstance(data, dict) else None
 
     def _serve_json(self, data: Any, status: HTTPStatus = HTTPStatus.OK) -> None:
         raw = json.dumps(data).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(raw)
 
     def _get_system_status(self) -> Dict[str, Any]:
         history = ScanHistoryManager().load_history()
         total_files_scanned = sum(h.get("summary", {}).get("total_scanned", 0) for h in history)
-        suspicious_count = sum(h.get("summary", {}).get("suspicious", 0) for h in history)
+        suspicious_count = sum(
+            h.get("summary", {}).get(k, 0) for h in history for k in ("suspicious", "likely_malicious", "known_malicious"))
         unfamiliar_count = sum(h.get("summary", {}).get("unfamiliar", 0) for h in history)
 
         # Include active session results
@@ -400,17 +538,31 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                 suspicious_count = max(suspicious_count, sum(1 for r in self.state_mgr.results if r.verdict == ScanVerdict.SUSPICIOUS))
                 unfamiliar_count = max(unfamiliar_count, sum(1 for r in self.state_mgr.results if r.verdict == ScanVerdict.UNFAMILIAR))
 
-        emb_dim = getattr(self.engine.model, "embedding_dim", 128) if (self.engine and self.engine.model) else 128
-        temp = getattr(self.engine.model, "temperature", 1.0) if (self.engine and self.engine.model) else 1.0
+        model = self.engine.model if self.engine else None
+        emb_dim = getattr(model, "embedding_dim", None) if model is not None else None
+        temp = float(getattr(model, "temperature", 1.0)) if model is not None else None
+        residual_blocks = None
+        model_kind = None
+        architecture = "No model loaded"
+        if model is not None:
+            from threatweaver.models.encoder import ResidualBlock
+            residual_blocks = sum(1 for m in model.modules() if isinstance(m, ResidualBlock))
+            model_kind = "ResMLP" if residual_blocks else "MLP"
+            architecture = f"{model.input_dim}-D static -> {model_kind} -> {emb_dim}-D L2 (T={temp:.2f})"
         return {
             "version": __version__,
             "model_version": self.engine.model_version,
+            "model_kind": model_kind,
+            "residual_blocks": residual_blocks,
             "embedding_dim": emb_dim,
             "temperature": temp,
-            "architecture": f"256-D static -> {emb_dim}-D L2 (T={temp:.2f})",
+            "architecture": architecture,
             "model_loaded": self.engine.checkpoint_loaded,
+            "checkpoint_path": str(self.engine.checkpoint_path) if self.engine.checkpoint_path else None,
+            "dataset": self._get_dataset_manifest_summary(),
+            "detector": self._detector_info(),
             "device": str(self.engine.device),
-            "novelty_threshold": self.engine.novelty_detector.threshold if self.engine.novelty_detector else 0.40,
+            "novelty_threshold": self.engine.novelty_detector.threshold if self.engine.novelty_detector else None,
             "quarantine_count": len(self.quarantine_mgr.list_quarantined_files()),
             "total_files_scanned": total_files_scanned,
             "suspicious_count": suspicious_count,
@@ -419,9 +571,102 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
             "protection_note": "Research prototype — Background real-time protection is inactive.",
         }
 
+    watcher = None  # observational folder watcher (one at a time)
+
+    def _watch_stop(self) -> None:
+        w = ThreatWeaverRequestHandler.watcher
+        if w is not None:
+            w.stop()
+            ThreatWeaverRequestHandler.watcher = None
+
+    def _watch_status(self) -> Dict[str, Any]:
+        w = ThreatWeaverRequestHandler.watcher
+        if w is None or not w.is_running():
+            return {"running": False, "mode": "stopped"}
+        return {
+            "running": True, "mode": w.mode, "folder": str(w.watch_dir),
+            "events": w.total_events_detected, "scanned": w.total_events_scanned,
+            "duplicates_dropped": w.total_duplicates_dropped,
+            "recent": [ScanStateManager._serialize(r) for r in list(w.last_results)[-25:]][::-1],
+        }
+
+    def _detector_info(self) -> Dict[str, Any]:
+        """The active detector and its real operating thresholds (drawn on the UI's verdict scale)."""
+        bundle = getattr(self.engine, "bundle", None)
+        if bundle is not None:
+            return {"kind": "lightgbm", "id": bundle.id, "tau_low": bundle.tau_low, "tau_high": bundle.tau_high,
+                    "rules_active": bool(getattr(self.engine, "known_bad", None) and self.engine.known_bad.active)}
+        if self.engine.checkpoint_loaded:
+            t = float(self.engine.threshold)
+            return {"kind": "legacy", "id": self.engine.model_version, "tau_low": t, "tau_high": t, "rules_active": False}
+        return {"kind": "none", "id": "none", "tau_low": 0.5, "tau_high": 0.5, "rules_active": False}
+
+    def _eval_files(self) -> Dict[str, Path]:
+        root = resource_path("artifacts")
+        files = sorted(root.glob("eval/*/eval.json")) + sorted(root.glob("models/*/eval.json"))
+        return {f.parent.name: f for f in files}
+
+    def _list_evals(self) -> Dict[str, Any]:
+        """Evaluation artifacts (eval/1) available to chart; summaries only."""
+        from threatweaver.models import signing
+        active_id = self._detector_info()["id"]
+        out = []
+        for eid, f in self._eval_files().items():
+            try:
+                d = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            test = (d.get("splits") or {}).get("test") or {}
+            out.append({
+                "id": eid, "kind": d.get("kind"), "created_utc": d.get("created_utc"),
+                "model": (d.get("model") or {}).get("id") or eid,
+                "file_types": (d.get("dataset") or {}).get("file_types"),
+                "test_roc_auc": test.get("roc_auc"), "test_tpr_at_fpr": test.get("tpr_at_fpr_curve"),
+                "n_test": test.get("n"), "signature": signing.verify_file(f).reason,
+                "active": eid == active_id,
+            })
+        return {"evals": out}
+
+    def _eval_detail(self, eid: str):
+        f = self._eval_files().get(eid)
+        if f is None:
+            return {"error": f"No evaluation named '{eid}'."}, HTTPStatus.NOT_FOUND
+        from threatweaver.models import signing
+        d = json.loads(f.read_text(encoding="utf-8"))
+        d["_signature"] = signing.verify_file(f).reason
+        return d, HTTPStatus.OK
+
+    def _get_dataset_manifest_summary(self) -> Dict[str, Any]:
+        """Reads the dataset manifest written by the EMBER2024 verifier (no hardcoded counts)."""
+        p = resource_path("artifacts/dataset/ember2024_manifest.json")
+        if not p.is_file():
+            return {"available": False, "reason": "No dataset manifest at artifacts/dataset/ember2024_manifest.json"}
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                m = json.load(f)
+        except Exception as e:
+            return {"available": False, "reason": f"Manifest unreadable: {e}"}
+        keys = ("samples", "benign", "malicious", "unlabeled", "corrupt_records", "total_bytes",
+                "time_span", "file_types", "verified", "manifest_timestamp")
+        out = {k: m.get(k) for k in keys}
+        out["available"] = True
+        out["source"] = str(p)
+        # EMBER2024 files contain every sample twice; prefer unique-SHA-256 counts when available.
+        fam = resource_path("artifacts/dataset/family_summary.json")
+        if fam.is_file():
+            try:
+                totals = json.loads(fam.read_text(encoding="utf-8")).get("totals", {})
+                if "unique_samples" in totals:
+                    out["unique_samples"] = totals["unique_samples"]
+                    out["unique_benign"] = totals.get("unique_benign", 0)
+                    out["unique_malicious"] = totals.get("unique_malicious", 0)
+            except (OSError, ValueError):
+                pass
+        return out
+
     def _serve_embedding_ablation(self) -> None:
-        p_res = Path("artifacts/benchmarks/embedding_dimension_results.json")
-        p_sel = Path("artifacts/benchmarks/selected_embedding_dimension.json")
+        p_res = resource_path("artifacts/benchmarks/embedding_dimension_results.json")
+        p_sel = resource_path("artifacts/benchmarks/selected_embedding_dimension.json")
         data: Dict[str, Any] = {}
         if p_res.is_file():
             try:
@@ -438,8 +683,8 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
         self._serve_json(data if data else {"status": "No embedding dimension ablation report available yet"})
 
     def _serve_research_results(self) -> None:
-        p_bench = Path("artifacts/benchmarks/continual_learning_results.json")
-        p_rep = Path("reports/continual_learning_results.json")
+        p_bench = resource_path("artifacts/benchmarks/continual_learning_results.json")
+        p_rep = resource_path("reports/continual_learning_results.json")
         target = p_bench if p_bench.is_file() else p_rep
         if target.is_file():
             try:
@@ -450,55 +695,18 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                 pass
         self._serve_json({"status": "No benchmark reports available yet"})
 
-    def _get_threat_network_data(self) -> Dict[str, Any]:
-        """Builds graph nodes & edges from known malware families and scanned samples."""
-        nodes: List[Dict[str, Any]] = []
-        edges: List[Dict[str, Any]] = []
+    # ------------------------------------------------------------------
+    # Data-provenance rule: every value returned below is either measured
+    # (scan results, checkpoint prototypes, dataset metadata, benchmark
+    # artifacts) or explicitly reported as unavailable. Nothing is invented.
+    # ------------------------------------------------------------------
 
-        # 1. Family Prototype Nodes
-        family_defs = self._get_families_data()["families"]
-        for fam in family_defs:
-            nodes.append({
-                "id": fam["id"],
-                "label": fam["name"],
-                "type": "family",
-                "category": fam["category"],
-                "risk": fam["risk"],
-                "size": fam.get("node_size", 16),
-                "color": fam["color"],
-                "sample_count": fam["sample_count"],
-                "description": fam["description"],
-                "dominant_apis": fam["dominant_apis"],
-                "entropy_mean": fam["entropy_mean"],
-                "imphash": fam["imphash"],
-            })
-
-        # Inter-family relationship edges (measured prototype similarities)
-        family_edges = [
-            ("fam-emotet", "fam-injector", 0.74, "Shared Code-Injection Primitive"),
-            ("fam-emotet", "fam-lockbit", 0.62, "Downloader Staging Link"),
-            ("fam-lockbit", "fam-shadow", 0.58, "C2 Exfiltration Channel"),
-            ("fam-agenttesla", "fam-emotet", 0.68, "Credential Delivery Chain"),
-            ("fam-syspe", "fam-runtimedll", 0.84, "Standard Windows Dynamic Binding"),
-            ("fam-syspe", "fam-utility", 0.79, "Administrative PE Core Dependency"),
-            ("fam-agenttesla", "fam-injector", 0.71, "Process Injection Stealer Pattern"),
-        ]
-        for src, tgt, sim, rel in family_edges:
-            edges.append({
-                "source": src,
-                "target": tgt,
-                "similarity": sim,
-                "relationship": rel,
-                "type": "inter_family",
-            })
-
-        # 2. Scanned Sample Nodes
-        scanned_samples: List[Dict[str, Any]] = []
-
-        # Use current active scan results if available
+    def _collect_scanned_samples(self) -> List[Dict[str, Any]]:
+        """Returns results from the active session, else from the latest saved scan."""
+        samples: List[Dict[str, Any]] = []
         with self.state_mgr.lock:
             for r in self.state_mgr.results:
-                scanned_samples.append({
+                samples.append({
                     "file_name": r.file_name,
                     "file_path": r.file_path,
                     "file_size_bytes": r.file_size_bytes,
@@ -509,146 +717,103 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                     "is_novel": r.is_novel,
                     "evidence_points": r.evidence_points,
                     "scan_duration_ms": r.scan_duration_ms,
+                    "nearest_known_cluster": r.nearest_known_cluster,
+                    "model_version": r.model_version,
                     "warning_message": r.warning_message,
+                    "explanation": r.explanation,
                 })
-
-        # If no active scan in this session, check latest scan from history
-        if not scanned_samples:
+        if not samples:
             try:
                 hist = ScanHistoryManager().load_history()
                 if hist:
-                    latest_scan = hist[-1]
-                    for r in latest_scan.get("results", []):
-                        scanned_samples.append(r)
+                    samples = list(hist[-1].get("results", []))
             except Exception:
                 pass
+        return samples
 
-        # Add sample nodes and link each sample to its nearest family cluster
-        for idx, sample in enumerate(scanned_samples):
-            sha = sample.get("sha256", f"sha_{idx:04d}")
-            node_id = f"s-{sha[:10]}" if sha else f"s-sample-{idx}"
-            file_name = sample.get("file_name", "unknown.exe")
-            verdict = sample.get("verdict", "Suspicious")
-            prob = sample.get("malware_probability", 0.5)
-            novelty = sample.get("novelty_score", 0.5)
-            evidence = sample.get("evidence_points", [])
+    def _get_threat_network_data(self) -> Dict[str, Any]:
+        """Graph of scanned files and the model's real prototype clusters.
 
-            # Determine category & color
-            if "Benign" in verdict:
-                cat = "benign"
-                color = "#34C759"
-                nearest_fam = "fam-runtimedll" if ".dll" in file_name.lower() else "fam-syspe"
-                similarity = round(0.91 - (novelty * 0.15), 3)
-            elif "Unfamiliar" in verdict:
-                cat = "unfamiliar"
-                color = "#AF52DE"
-                nearest_fam = "fam-injector"
-                similarity = round(0.55 + (prob * 0.1), 3)
-            else:
-                cat = "suspicious"
-                color = "#FF9500" if prob < 0.85 else "#FF3B30"
-                # Determine nearest family by evidence content
-                ev_str = " ".join(evidence).lower()
-                if "evasion" in ev_str or "debugger" in ev_str:
-                    nearest_fam = "fam-emotet"
-                elif "process_exec" in ev_str or "createprocess" in ev_str:
-                    nearest_fam = "fam-injector"
-                elif "crypt" in ev_str:
-                    nearest_fam = "fam-lockbit"
-                else:
-                    nearest_fam = "fam-emotet"
-                similarity = round(0.82 + (prob * 0.12), 3)
+        Sample -> cluster edges use the nearest prototype and cosine similarity
+        (1 - novelty distance) actually computed by the novelty detector at scan time.
+        """
+        nodes: List[Dict[str, Any]] = []
+        edges: List[Dict[str, Any]] = []
 
+        protos = self.engine.novelty_detector.get_prototypes_summary() if self.engine.novelty_detector else []
+        proto_ids: Dict[str, str] = {}
+        for p in protos:
+            pid = f"proto-{p['family_name']}"
+            proto_ids[p["family_name"]] = pid
+            nodes.append({
+                "id": pid,
+                "label": p["family_name"],
+                "type": "prototype",
+                "category": "malware" if p["label"] == 1 else "benign",
+                "sample_count": p["sample_count"],
+                "dimension": p["dimension"],
+                "source": "checkpoint prototype (k-means centroid of training embeddings)",
+            })
+
+        scanned = self._collect_scanned_samples()
+        for idx, s in enumerate(scanned):
+            sha = s.get("sha256") or ""
+            node_id = f"s-{sha[:12]}" if sha else f"s-{idx}"
+            verdict = str(s.get("verdict", ""))
             nodes.append({
                 "id": node_id,
-                "label": file_name,
+                "label": s.get("file_name", ""),
                 "type": "sample",
-                "category": cat,
                 "verdict": verdict,
-                "risk": prob,
-                "novelty": novelty,
-                "is_novel": sample.get("is_novel", False),
-                "size": 11 if cat == "benign" else 12,
-                "color": color,
-                "file_path": sample.get("file_path", ""),
-                "file_size_bytes": sample.get("file_size_bytes", 0),
+                "risk": s.get("malware_probability"),
+                "novelty": s.get("novelty_score"),
+                "is_novel": s.get("is_novel", False),
+                "file_path": s.get("file_path", ""),
+                "file_size_bytes": s.get("file_size_bytes", 0),
                 "sha256": sha,
-                "evidence_points": evidence,
-                "scan_duration_ms": sample.get("scan_duration_ms", 12.0),
-                "nearest_cluster": nearest_fam,
-                "similarity": similarity,
+                "evidence_points": s.get("evidence_points", []),
+                "scan_duration_ms": s.get("scan_duration_ms"),
+                "nearest_cluster": s.get("nearest_known_cluster"),
             })
-
-            # Edge connecting sample to nearest family
-            edges.append({
-                "source": node_id,
-                "target": nearest_fam,
-                "similarity": similarity,
-                "relationship": f"Embedding Cosine Similarity: {int(similarity * 100)}%",
-                "type": "sample_to_family",
-            })
-
-            # Connect peer executables that share attributes (e.g. cli-32 <-> cli-64)
-            if idx > 0 and idx % 4 == 0:
-                prev_id = nodes[-2]["id"]
+            nearest = s.get("nearest_known_cluster")
+            # Only neural-tier results (fresh or cached) carry a measured embedding distance.
+            mv = str(s.get("model_version", ""))
+            if nearest and nearest in proto_ids and "Authenticode" not in mv and "Model Not Loaded" not in mv:
+                distance = float(s.get("novelty_score") or 0.0)
                 edges.append({
                     "source": node_id,
-                    "target": prev_id,
-                    "similarity": 0.88,
-                    "relationship": "Shared Imphash & Section Structure",
-                    "type": "sample_to_sample",
+                    "target": proto_ids[nearest],
+                    "similarity": round(1.0 - distance, 4),
+                    "relationship": "Nearest prototype (measured cosine similarity)",
+                    "type": "sample_to_prototype",
                 })
 
-        fs_items, fs_edges = self._build_filesystem_web(scanned_samples)
+        fs_items, fs_edges = self._build_filesystem_web(scanned)
         return {
             "nodes": nodes,
             "edges": edges,
             "fs_items": fs_items,
             "fs_edges": fs_edges,
+            "available": bool(scanned),
+            "reason": None if scanned else "No scan results yet. Run a scan to populate the graph.",
         }
 
     def _build_filesystem_web(
         self, scanned_samples: List[Dict[str, Any]]
-    ) -> Tuple[List[Dict[str, Any]], List[List[int]]]:
-        """Constructs an organic, multi-folder filesystem graph representing the scanned target,
-        dividing directories and functional branches with threats and flagged files prominently highlighted.
+    ) -> "tuple[List[Dict[str, Any]], List[List[int]]]":
+        """Lays out scanned files around their directories (or verdict groups for one directory).
+
+        Positions are a deterministic radial layout; states come from real scan verdicts.
         """
         import math
         import os
 
-        # Default multi-directory system baseline when no scans have been performed yet
         if not scanned_samples:
-            default_items = [
-                {"name": "System Root (C:)", "kind": "folder", "state": "benign", "x": 0.50, "y": 0.50, "path": "C:\\"},
-                {"name": "System32", "kind": "folder", "state": "benign", "x": 0.28, "y": 0.28, "path": "C:\\Windows\\System32"},
-                {"name": "SysWOW64", "kind": "folder", "state": "benign", "x": 0.72, "y": 0.28, "path": "C:\\Windows\\SysWOW64"},
-                {"name": "Program Files", "kind": "folder", "state": "benign", "x": 0.22, "y": 0.68, "path": "C:\\Program Files"},
-                {"name": "Users\\Public", "kind": "folder", "state": "suspicious", "x": 0.78, "y": 0.68, "path": "C:\\Users\\Public"},
-                {"name": "svchost.exe", "kind": "file", "state": "benign", "x": 0.28, "y": 0.14, "prob": 0.012, "novel": 0.08, "sha256": "4a2b1c8f9e013456", "path": "C:\\Windows\\System32\\svchost.exe", "evidence": ["Standard Windows Service Host", "Signed MS PE"]},
-                {"name": "kernel32.dll", "kind": "file", "state": "benign", "x": 0.16, "y": 0.25, "prob": 0.005, "novel": 0.04, "sha256": "1c8f9e0134564a2b", "path": "C:\\Windows\\System32\\kernel32.dll", "evidence": ["Core Win32 Subsystem Library", "Valid Authenticode"]},
-                {"name": "explorer.exe", "kind": "file", "state": "benign", "x": 0.40, "y": 0.22, "prob": 0.204, "novel": 0.36, "sha256": "eee089fe6f92019a", "path": "C:\\Windows\\explorer.exe", "evidence": ["Windows GUI Shell", "Calibrated Benign"]},
-                {"name": "winlogon.exe", "kind": "file", "state": "benign", "x": 0.36, "y": 0.36, "prob": 0.018, "novel": 0.11, "sha256": "9e0134564a2b1c8f", "path": "C:\\Windows\\System32\\winlogon.exe", "evidence": ["Logon Management Process"]},
-                {"name": "rundll32.exe", "kind": "file", "state": "suspicious", "x": 0.20, "y": 0.40, "prob": 0.782, "novel": 0.18, "sha256": "34564a2b1c8f9e01", "path": "C:\\Windows\\System32\\rundll32.exe", "evidence": ["Dynamic DLL Execution Host", "Suspicious Process Pattern"]},
-                {"name": "taskhostw.exe", "kind": "file", "state": "benign", "x": 0.65, "y": 0.16, "prob": 0.015, "novel": 0.09, "sha256": "564a2b1c8f9e0134", "path": "C:\\Windows\\SysWOW64\\taskhostw.exe", "evidence": ["Task Host Container"]},
-                {"name": "runtime.dll", "kind": "file", "state": "benign", "x": 0.12, "y": 0.80, "prob": 0.032, "novel": 0.12, "sha256": "7a8b9c0d1e2f3a4b", "path": "C:\\Program Files\\Runtime\\runtime.dll", "evidence": ["Standard C++ Runtime Library"]},
-                {"name": "updater.exe", "kind": "file", "state": "novel", "x": 0.32, "y": 0.80, "prob": 0.184, "novel": 0.67, "sha256": "8b9c0d1e2f3a4b5c", "path": "C:\\Program Files\\App\\updater.exe", "evidence": ["Out-of-Distribution Custom Packer", "Low Malicious Signal"]},
-                {"name": "update.exe", "kind": "file", "state": "threat", "x": 0.72, "y": 0.80, "prob": 0.964, "novel": 0.67, "sha256": "9c0d1e2f3a4b5c6d", "path": "C:\\Users\\Public\\update.exe", "evidence": ["Process Injection: VirtualAllocEx", "Polymorphic Payload", "Dynamic Load: GetProcAddress"]},
-                {"name": "helper.exe", "kind": "file", "state": "threat", "x": 0.88, "y": 0.60, "prob": 0.914, "novel": 0.58, "sha256": "0d1e2f3a4b5c6d7e", "path": "C:\\Users\\Public\\helper.exe", "evidence": ["Evasion: IsDebuggerPresent", "Persistence: RegSetValueExW", "Suspicious Network: WSASend"]},
-                {"name": "payload.dll", "kind": "file", "state": "threat", "x": 0.86, "y": 0.80, "prob": 0.991, "novel": 0.72, "sha256": "3a4b5c6d7e8f9012", "path": "C:\\Users\\Public\\payload.dll", "evidence": ["LockBit Ransomware Signature", "Reflective DLL Loader", "High Encryption Entropy"]},
-            ]
-            default_edges = [
-                [0, 1], [0, 2], [0, 3], [0, 4],
-                [1, 5], [1, 6], [1, 7], [1, 8], [1, 9],
-                [2, 10], [3, 11], [3, 12],
-                [4, 13], [4, 14], [4, 15],
-                [13, 14], [14, 15], [9, 13]
-            ]
-            return default_items, default_edges
+            return [], []
 
         items: List[Dict[str, Any]] = []
         edges: List[List[int]] = []
 
-        # Determine target root name
         first_path = scanned_samples[0].get("file_path", "")
         if first_path:
             p_obj = Path(first_path)
@@ -656,435 +821,191 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
                 target_root_name = f"File Target: {p_obj.name}"
                 root_path_str = str(p_obj.parent)
             else:
-                # Find common parent directory
-                parents = [Path(s.get("file_path", "")).parent for s in scanned_samples if s.get("file_path")]
-                common = os.path.commonpath([str(p) for p in parents]) if parents else str(p_obj.parent)
+                parents = [str(Path(s.get("file_path", "")).parent) for s in scanned_samples if s.get("file_path")]
+                try:
+                    common = os.path.commonpath(parents) if parents else str(p_obj.parent)
+                except ValueError:  # paths on different drives
+                    common = "Multiple Drives"
                 target_root_name = Path(common).name or common or "Scanned Target"
                 root_path_str = str(common)
         else:
             target_root_name = "Scanned Target"
             root_path_str = "Target Root"
 
-        # 1. Root Node
         root_idx = 0
-        items.append({
-            "name": target_root_name,
-            "kind": "folder",
-            "state": "benign",
-            "x": 0.50,
-            "y": 0.50,
-            "path": root_path_str,
-        })
+        items.append({"name": target_root_name, "kind": "folder", "state": "benign",
+                      "x": 0.50, "y": 0.50, "path": root_path_str})
 
-        # Group samples: check if multiple subdirectories exist
+        def file_state(f: Dict[str, Any]) -> str:
+            verdict = str(f.get("verdict", ""))
+            if "Suspicious" in verdict or "Malicious" in verdict:
+                return "threat"
+            if "Unfamiliar" in verdict or bool(f.get("is_novel")):
+                return "novel"
+            return "benign"
+
         dir_groups: Dict[str, List[Dict[str, Any]]] = {}
         for s in scanned_samples:
             p_str = s.get("file_path", "")
-            if p_str:
-                d = str(Path(p_str).parent)
-            else:
-                d = "Target Root"
+            d = str(Path(p_str).parent) if p_str else "Target Root"
             dir_groups.setdefault(d, []).append(s)
 
-        # Multi-Directory vs Single-Directory Branching
-        # If all samples belong to a single directory (e.g. C:\Windows\System32 or 1 file),
-        # organize into functional / structural hubs so the graph has a rich, informative topology!
         hub_specs: List[Dict[str, Any]] = []
-
         if len(dir_groups) == 1:
-            only_dir = list(dir_groups.keys())[0]
-            all_files = dir_groups[only_dir]
-
-            # Categorize files into functional hubs:
-            # 1. Flagged Threats / Suspicious (Incident Hub)
-            # 2. Executables (.exe)
-            # 3. Dynamic Libraries (.dll)
-            # 4. Other System Binaries / Scripts (.sys, .bin, etc.)
-            threat_files = [f for f in all_files if float(f.get("malware_probability", 0.0)) >= 0.5 or "Suspicious" in str(f.get("verdict", ""))]
-            novel_files = [f for f in all_files if f not in threat_files and (bool(f.get("is_novel")) or "Unfamiliar" in str(f.get("verdict", "")))]
-            clean_exes = [f for f in all_files if f not in threat_files and f not in novel_files and f.get("file_name", "").lower().endswith(".exe")]
-            clean_dlls = [f for f in all_files if f not in threat_files and f not in novel_files and f.get("file_name", "").lower().endswith(".dll")]
-            clean_others = [f for f in all_files if f not in threat_files and f not in novel_files and f not in clean_exes and f not in clean_dlls]
-
-            if threat_files:
-                hub_specs.append({
-                    "name": "Flagged Threats",
-                    "state": "threat",
-                    "files": threat_files,
-                    "desc": "Confirmed or highly suspicious binaries"
-                })
-            if novel_files:
-                hub_specs.append({
-                    "name": "Novel / OOD Binaries",
-                    "state": "novel",
-                    "files": novel_files,
-                    "desc": "Out-of-distribution structural topologies"
-                })
-            if clean_exes:
-                hub_specs.append({
-                    "name": "Core Executables (.exe)",
-                    "state": "benign",
-                    "files": clean_exes,
-                    "desc": "Application and CLI binaries"
-                })
-            if clean_dlls:
-                hub_specs.append({
-                    "name": "Shared Libraries (.dll)",
-                    "state": "benign",
-                    "files": clean_dlls,
-                    "desc": "Dynamic link libraries and dependencies"
-                })
-            if clean_others:
-                hub_specs.append({
-                    "name": "System Components",
-                    "state": "benign",
-                    "files": clean_others,
-                    "desc": "Drivers, components and manifests"
-                })
-
-            # If only 1 file total (e.g. cmd.exe)
-            if len(all_files) == 1:
-                f0 = all_files[0]
-                prob0 = float(f0.get("malware_probability", 0.0))
-                is_mal0 = prob0 >= 0.5
-                hub_specs = [{
-                    "name": Path(only_dir).name or "Target Directory",
-                    "state": "threat" if is_mal0 else "benign",
-                    "files": all_files,
-                    "desc": "Target directory containing inspected binary"
-                }]
-                # Add contextual sibling hub to show system context
-                hub_specs.append({
-                    "name": "Subsystem Dependencies",
-                    "state": "benign",
-                    "files": [
-                        {"file_name": "ntdll.dll", "file_path": f"{only_dir}\\ntdll.dll", "verdict": "Likely Benign", "malware_probability": 0.01, "novelty_score": 0.04, "evidence_points": ["Core NT Subsystem Dependency"]},
-                        {"file_name": "kernel32.dll", "file_path": f"{only_dir}\\kernel32.dll", "verdict": "Likely Benign", "malware_probability": 0.005, "novelty_score": 0.03, "evidence_points": ["Win32 API Layer"]},
-                    ],
-                    "desc": "Linked system libraries"
-                })
+            only_dir, all_files = next(iter(dir_groups.items()))
+            groups = [
+                ("Flagged by model", "threat", [f for f in all_files if file_state(f) == "threat"]),
+                ("Unfamiliar / OOD", "novel", [f for f in all_files if file_state(f) == "novel"]),
+                ("Executables (.exe)", "benign", [f for f in all_files if file_state(f) == "benign" and f.get("file_name", "").lower().endswith(".exe")]),
+                ("Libraries (.dll)", "benign", [f for f in all_files if file_state(f) == "benign" and f.get("file_name", "").lower().endswith(".dll")]),
+            ]
+            grouped = {id(f) for _, _, fs in groups for f in fs}
+            groups.append(("Other files", "benign", [f for f in all_files if id(f) not in grouped]))
+            for name, state, files in groups:
+                if files:
+                    hub_specs.append({"name": name, "state": state, "files": files, "desc": only_dir})
         else:
-            # Multi-directory target (e.g. workspace with src, tests, artifacts, etc.)
             for d_path, d_files in dir_groups.items():
-                short_name = Path(d_path).name or d_path
-                has_threats = any(float(f.get("malware_probability", 0.0)) >= 0.5 or "Suspicious" in str(f.get("verdict", "")) for f in d_files)
-                has_novel = any(bool(f.get("is_novel")) or "Unfamiliar" in str(f.get("verdict", "")) for f in d_files)
-                h_state = "threat" if has_threats else ("novel" if has_novel else "benign")
-                hub_specs.append({
-                    "name": short_name,
-                    "state": h_state,
-                    "files": d_files,
-                    "desc": str(d_path),
-                })
+                states = {file_state(f) for f in d_files}
+                h_state = "threat" if "threat" in states else ("novel" if "novel" in states else "benign")
+                hub_specs.append({"name": Path(d_path).name or d_path, "state": h_state,
+                                  "files": d_files, "desc": str(d_path)})
 
-        # Layout Hubs radially around Root Node
         num_hubs = max(len(hub_specs), 1)
-        all_threat_nodes: List[int] = []
-
         for h_idx, h_spec in enumerate(hub_specs):
             h_angle = (2.0 * math.pi * h_idx) / num_hubs
-            h_dist_x, h_dist_y = 0.28, 0.24
-            hx = round(0.50 + h_dist_x * math.cos(h_angle), 3)
-            hy = round(0.50 + h_dist_y * math.sin(h_angle), 3)
-
+            hx = round(0.50 + 0.28 * math.cos(h_angle), 3)
+            hy = round(0.50 + 0.24 * math.sin(h_angle), 3)
             hub_node_idx = len(items)
-            items.append({
-                "name": h_spec["name"],
-                "kind": "folder",
-                "state": h_spec["state"],
-                "x": hx,
-                "y": hy,
-                "path": h_spec.get("desc", h_spec["name"]),
-            })
+            items.append({"name": h_spec["name"], "kind": "folder", "state": h_spec["state"],
+                          "x": hx, "y": hy, "path": h_spec.get("desc", h_spec["name"])})
             edges.append([root_idx, hub_node_idx])
 
-            # Position files around their respective hub
             h_files = h_spec["files"]
-            num_h_files = len(h_files)
-
+            n_files = len(h_files)
             for f_idx, f_data in enumerate(h_files):
-                f_spread = 0.40 if num_h_files > 4 else 0.60
-                f_angle = h_angle - (f_spread * math.pi * 0.5) + (f_idx + 1) * (f_spread * math.pi / max(num_h_files, 1))
+                f_spread = 0.40 if n_files > 4 else 0.60
+                f_angle = h_angle - (f_spread * math.pi * 0.5) + (f_idx + 1) * (f_spread * math.pi / max(n_files, 1))
                 f_dist = 0.10 + (0.04 * (f_idx % 2))
                 fx = round(max(0.04, min(0.96, hx + f_dist * math.cos(f_angle))), 3)
                 fy = round(max(0.04, min(0.96, hy + f_dist * math.sin(f_angle))), 3)
-
-                verdict = str(f_data.get("verdict", ""))
-                prob = float(f_data.get("malware_probability", 0.0))
-                novelty = float(f_data.get("novelty_score", 0.0))
-                is_novel = bool(f_data.get("is_novel", False))
-
-                if "Suspicious" in verdict or prob >= 0.50:
-                    state = "threat"
-                elif "Unfamiliar" in verdict or is_novel:
-                    state = "novel"
-                else:
-                    state = "benign"
-
                 file_node_idx = len(items)
                 items.append({
-                    "name": f_data.get("file_name", "sample.exe"),
+                    "name": f_data.get("file_name", ""),
                     "kind": "file",
-                    "state": state,
+                    "state": file_state(f_data),
                     "x": fx,
                     "y": fy,
-                    "prob": round(prob, 3),
-                    "novel": round(novelty, 3),
-                    "sha256": f_data.get("sha256", "N/A"),
+                    "prob": round(float(f_data.get("malware_probability") or 0.0), 3),
+                    "novel": round(float(f_data.get("novelty_score") or 0.0), 3),
+                    "sha256": f_data.get("sha256", ""),
                     "path": f_data.get("file_path", ""),
+                    "verdict": f_data.get("verdict", ""),
                     "evidence": f_data.get("evidence_points", []),
                 })
                 edges.append([hub_node_idx, file_node_idx])
 
-                if state == "threat":
-                    all_threat_nodes.append(file_node_idx)
-
-        # Thread connections between flagged threats to show correlation
-        for t_idx in range(len(all_threat_nodes) - 1):
-            edges.append([all_threat_nodes[t_idx], all_threat_nodes[t_idx + 1]])
-
         return items, edges
 
     def _get_families_data(self) -> Dict[str, Any]:
-        """Returns structured metadata for known malware families and benign baselines."""
+        """Serves family statistics counted from local EMBER2024 metadata (tools/build_family_summary.py)."""
+        p = resource_path("artifacts/dataset/family_summary.json")
+        if p.is_file():
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception as e:
+                return {"available": False, "families": [], "reason": f"Family summary unreadable: {e}"}
         return {
-            "families": [
-                {
-                    "id": "fam-emotet",
-                    "name": "Downloader.Emotet",
-                    "category": "downloader",
-                    "threat_type": "Modular Trojan & Dropper",
-                    "risk": 0.94,
-                    "color": "#FF3B30",
-                    "sample_count": 420,
-                    "node_size": 18,
-                    "description": "Polymorphic banking trojan and modular loader utilizing macro-based staging, evasion loops, and process hollowing.",
-                    "dominant_apis": ["URLDownloadToFile", "CreateProcessA", "VirtualAlloc", "IsDebuggerPresent"],
-                    "entropy_mean": 7.42,
-                    "imphash": "a4c281093f61b0c9",
-                    "markers": ["Dynamic API resolution", "Polymorphic XOR payload", "Anti-sandbox tick delays"],
-                },
-                {
-                    "id": "fam-lockbit",
-                    "name": "Ransomware.LockBit",
-                    "category": "ransomware",
-                    "threat_type": "High-Speed Cryptor",
-                    "risk": 0.98,
-                    "color": "#FF3B30",
-                    "sample_count": 310,
-                    "node_size": 19,
-                    "description": "High-speed multi-threaded ransomware employing AES/RSA hybrid cryptography, shadow copy deletion, and service termination.",
-                    "dominant_apis": ["CryptAcquireContext", "CryptEncrypt", "CreateFileW", "DeleteFileW"],
-                    "entropy_mean": 7.88,
-                    "imphash": "88d7261a9c34f012",
-                    "markers": ["Encrypted section headers", "Volume shadow suppression", "Privilege escalation tokens"],
-                },
-                {
-                    "id": "fam-agenttesla",
-                    "name": "Keylogger.AgentTesla",
-                    "category": "infostealer",
-                    "threat_type": "Spyware & Credential Harvester",
-                    "risk": 0.89,
-                    "color": "#FF9500",
-                    "sample_count": 280,
-                    "node_size": 16,
-                    "description": "Advanced spyware extracting browser credentials, system keystrokes, clipboard records, and VPN profiles.",
-                    "dominant_apis": ["GetAsyncKeyState", "SetWindowsHookEx", "RegSetValueEx", "InternetOpen"],
-                    "entropy_mean": 6.85,
-                    "imphash": "32bf9012cda456ef",
-                    "markers": ["Global keyboard hooking", "Registry autostart persistence", "SMTP exfiltration"],
-                },
-                {
-                    "id": "fam-injector",
-                    "name": "Injector.Reflective",
-                    "category": "injector",
-                    "threat_type": "In-Memory Shellcode Loader",
-                    "risk": 0.92,
-                    "color": "#FF9500",
-                    "sample_count": 195,
-                    "node_size": 17,
-                    "description": "In-memory stealth execution loader bypassing API hooks via manual PE mapping, thread hijacking, and direct syscalls.",
-                    "dominant_apis": ["VirtualAllocEx", "WriteProcessMemory", "CreateRemoteThread", "OpenProcess"],
-                    "entropy_mean": 7.15,
-                    "imphash": "5e912bc04a88bc31",
-                    "markers": ["Unbacked memory execution", "Remote process allocation", "Section permission patching"],
-                },
-                {
-                    "id": "fam-shadow",
-                    "name": "Backdoor.Shadow",
-                    "category": "backdoor",
-                    "threat_type": "Remote Access Trojan (RAT)",
-                    "risk": 0.93,
-                    "color": "#FF3B30",
-                    "sample_count": 230,
-                    "node_size": 16,
-                    "description": "Persistent remote administration tool supporting TLS-encrypted command channels, file management, and reverse shells.",
-                    "dominant_apis": ["WSAStartup", "connect", "send", "recv", "CreatePipe"],
-                    "entropy_mean": 6.95,
-                    "imphash": "c348d910fe7142aa",
-                    "markers": ["Beaconing traffic jitter", "Interactive CMD pipe redirection", "Mutual exclusion locks"],
-                },
-                {
-                    "id": "fam-syspe",
-                    "name": "Benign.WindowsSystem",
-                    "category": "benign",
-                    "threat_type": "Operating System Binary",
-                    "risk": 0.04,
-                    "color": "#34C759",
-                    "sample_count": 1840,
-                    "node_size": 18,
-                    "description": "Legitimate operating system binaries and signed Windows core service executables adhering to strict PE specifications.",
-                    "dominant_apis": ["GetModuleHandleW", "LoadLibraryExW", "HeapAlloc", "GetTickCount"],
-                    "entropy_mean": 5.82,
-                    "imphash": "91a32b00118ac415",
-                    "markers": ["Valid Microsoft Authenticode", "Standard structured exception handling", "Bounded imports"],
-                },
-                {
-                    "id": "fam-runtimedll",
-                    "name": "Benign.RuntimeDLL",
-                    "category": "benign",
-                    "threat_type": "Redistributable Shared Library",
-                    "risk": 0.02,
-                    "color": "#34C759",
-                    "sample_count": 920,
-                    "node_size": 16,
-                    "description": "Standard Microsoft Visual C++ and CRT redistributable dynamic-link libraries utilized across development runtimes.",
-                    "dominant_apis": ["malloc", "free", "memmove", "FlsAlloc"],
-                    "entropy_mean": 6.12,
-                    "imphash": "44e09a31bb610029",
-                    "markers": ["CRT initialization routines", "Deterministic section layout", "Low anomalous string count"],
-                },
-                {
-                    "id": "fam-utility",
-                    "name": "Benign.AdminUtility",
-                    "category": "benign",
-                    "threat_type": "Administrative CLI Tool",
-                    "risk": 0.06,
-                    "color": "#34C759",
-                    "sample_count": 640,
-                    "node_size": 15,
-                    "description": "Legitimate administrative tools, compilers, shell utilities, and command-line system inspection software.",
-                    "dominant_apis": ["GetCommandLineW", "GetStdHandle", "WriteFile", "ExitProcess"],
-                    "entropy_mean": 5.95,
-                    "imphash": "18d400ac72995e80",
-                    "markers": ["Console subsystem flags", "Standard argument parsing", "Clean import directory"],
-                },
-            ]
+            "available": False,
+            "families": [],
+            "reason": "No family summary yet. Run: python tools/build_family_summary.py",
         }
 
     def _get_timeline_data(self) -> Dict[str, Any]:
-        """Returns continual learning chronological timeline and benchmark comparisons."""
-        # Read from continual_learning_results.json if available
-        summary_results: Dict[str, Any] = {}
-        res_p = Path("reports/continual_learning_results.json")
-        if res_p.is_file():
-            try:
-                with open(res_p, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    summary_results = data.get("strategy_summaries", {})
-            except Exception:
-                pass
+        """Continual-learning results with explicit provenance.
 
-        if not summary_results:
-            summary_results = {
-                "none": {"name": "A. No Replay (Naive)", "macro_f1_mean": 1.0, "forgetting_mean": 0.0, "bwt_mean": 0.0, "fpr_mean": 0.0, "time_sec_mean": 2.68},
-                "random": {"name": "B. Uniform Random Replay", "macro_f1_mean": 1.0, "forgetting_mean": 0.0, "bwt_mean": 0.0, "fpr_mean": 0.0, "time_sec_mean": 1.51},
-                "uncertainty": {"name": "C. Uncertainty-Guided Replay", "macro_f1_mean": 1.0, "forgetting_mean": 0.0, "bwt_mean": 0.0, "fpr_mean": 0.0, "time_sec_mean": 1.47},
-                "uncertainty_diversity": {"name": "D. Uncertainty + Diversity Replay", "macro_f1_mean": 1.0, "forgetting_mean": 0.0, "bwt_mean": 0.0, "fpr_mean": 0.0, "time_sec_mean": 1.80},
+        Real results: artifacts/benchmarks/continual_learning_results.json, produced by
+        tools/run_real_ember_benchmarks.py from 5 consecutive 2-week windows of EMBER2024 Dot_Net_test.
+        reports/continual_learning_results.json is produced from SYNTHETIC data and is labelled as such.
+        """
+        real_p = resource_path("artifacts/benchmarks/continual_learning_results.json")
+        synth_p = resource_path("reports/continual_learning_results.json")
+
+        if real_p.is_file():
+            try:
+                with open(real_p, "r", encoding="utf-8") as f:
+                    raw = json.load(f)
+            except Exception as e:
+                return {"available": False, "reason": f"Benchmark artifact unreadable: {e}"}
+            strategies = {
+                k: {
+                    "name": k,
+                    "macro_f1_mean": v.get("final_macro_f1"),
+                    "forgetting_mean": v.get("catastrophic_forgetting"),
+                    "bwt_mean": v.get("backward_transfer"),
+                    "fpr_mean": v.get("final_fpr"),
+                    "time_sec_mean": v.get("training_time_sec"),
+                    "r_matrix": v.get("r_matrix"),
+                }
+                for k, v in raw.items() if isinstance(v, dict)
+            }
+            batches: List[Dict[str, Any]] = []
+            dn_files = sorted(resource_path("data/ember2024/Dot_Net_test").glob("*.jsonl"))
+            for b in range(5):
+                pair = dn_files[2 * b: 2 * b + 2]
+                if len(pair) == 2:
+                    start = pair[0].name.split("_")[0]
+                    end = pair[1].name.split("_")[1]
+                    batches.append({"batch_id": f"T{b + 1}", "window_start": start, "window_end": end,
+                                    "partition": "Dot_Net_test", "files": [x.name for x in pair]})
+            return {
+                "available": True,
+                "kind": "benchmark",
+                "source": str(real_p),
+                "dataset": "EMBER2024 Dot_Net_test (5 consecutive two-week windows)",
+                "caveats": [
+                    "Single run (no seed repetition); uses the legacy 256-D harmonized features.",
+                    "Batch windows are derived from the weekly file names used by tools/run_real_ember_benchmarks.py.",
+                ],
+                "batches": batches,
+                "strategies": strategies,
             }
 
-        return {
-            "batches": [
-                {
-                    "batch_id": "T1",
-                    "label": "Batch 1: Core System Baseline",
-                    "partition_date": "2026-01-15",
-                    "sample_count": 200,
-                    "description": "Foundational Windows system executables and standard C runtime dynamic libraries.",
-                    "new_families": ["Benign.WindowsSystem", "Benign.RuntimeDLL"],
-                },
-                {
-                    "batch_id": "T2",
-                    "label": "Batch 2: Evasion & Downloaders",
-                    "partition_date": "2026-03-01",
-                    "sample_count": 200,
-                    "description": "First wave of polymorphic loaders exhibiting anti-debugging and remote staging behaviors.",
-                    "new_families": ["Downloader.Emotet"],
-                },
-                {
-                    "batch_id": "T3",
-                    "label": "Batch 3: High-Entropy Ransomware",
-                    "partition_date": "2026-04-15",
-                    "sample_count": 200,
-                    "description": "Multi-threaded ransomware variants with high-entropy cryptographic sections.",
-                    "new_families": ["Ransomware.LockBit"],
-                },
-                {
-                    "batch_id": "T4",
-                    "label": "Batch 4: In-Memory Injectors & Stealers",
-                    "partition_date": "2026-06-01",
-                    "sample_count": 200,
-                    "description": "Process-hollowing injectors and keystroke logging spyware targeting credential stores.",
-                    "new_families": ["Injector.Reflective", "Keylogger.AgentTesla"],
-                },
-                {
-                    "batch_id": "T5",
-                    "label": "Batch 5: Encrypted C2 Backdoors",
-                    "partition_date": "2026-07-20",
-                    "sample_count": 200,
-                    "description": "Reverse-shell command-and-control backdoors with TLS-encrypted protocol obfuscation.",
-                    "new_families": ["Backdoor.Shadow"],
-                },
-            ],
-            "strategies": summary_results,
-            "buffer_capacity": 100,
-            "label_budget_per_batch": 50,
-        }
+        if synth_p.is_file():
+            try:
+                with open(synth_p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                return {
+                    "available": True,
+                    "kind": "synthetic",
+                    "source": str(synth_p),
+                    "caveats": ["Produced from generate_synthetic_benchmark_dataset; not real malware data."],
+                    "batches": [],
+                    "strategies": data.get("strategy_summaries", {}),
+                    "metadata": data.get("metadata", {}),
+                }
+            except Exception:
+                pass
+        return {"available": False, "reason": "No continual-learning results found."}
 
     def _get_sample_details(self, identifier: str) -> Dict[str, Any]:
-        """Provides in-depth sample attribution, feature breakdown, and nearest neighbors."""
-        network = self._get_threat_network_data()
-        target_node = None
-        for n in network["nodes"]:
-            if identifier and (identifier in n.get("id", "") or identifier in n.get("sha256", "") or identifier in n.get("label", "")):
-                target_node = n
-                break
-
-        if not target_node:
-            target_node = network["nodes"][0]
-
-        # Synthesize attribution bars and similar peers
-        is_mal = target_node.get("risk", 0.0) >= 0.5
-        entropy_score = 88 if is_mal else 34
-        api_score = 92 if is_mal else 18
-        evasion_score = 75 if is_mal else 8
-        header_score = 45 if is_mal else 12
-
-        return {
-            "node": target_node,
-            "feature_attribution": [
-                {"name": "Section High Entropy", "value": entropy_score, "description": "Measures packing and encrypted payload sections"},
-                {"name": "Suspicious API Imports", "value": api_score, "description": "Process injection, dynamic loading, and memory manipulation"},
-                {"name": "Anti-Analysis / Evasion", "value": evasion_score, "description": "Debugger detection loops and timestamp anomalies"},
-                {"name": "PE Header Anomalies", "value": header_score, "description": "Zeroed debug timestamps and unusual subsystem flags"},
-            ],
-            "nearest_neighbors": [
-                {"label": "Downloader.Emotet", "similarity": 88.4, "category": "downloader"},
-                {"label": "Injector.Reflective", "similarity": 82.1, "category": "injector"},
-                {"label": "Keylogger.AgentTesla", "similarity": 74.3, "category": "infostealer"},
-            ] if is_mal else [
-                {"label": "Benign.WindowsSystem", "similarity": 94.2, "category": "benign"},
-                {"label": "Benign.RuntimeDLL", "similarity": 91.8, "category": "benign"},
-                {"label": "Benign.AdminUtility", "similarity": 86.5, "category": "benign"},
-            ],
-            "shared_attributes": {
-                "imphash": target_node.get("imphash", "a4c281093f61b0c9" if is_mal else "91a32b00118ac415"),
-                "compiler": "MSVC++ 14.x / LLVM Clang",
-                "packer": "UPX / Custom XOR" if is_mal else "None (Standard PE)",
-                "subsystem": "WINDOWS_GUI" if is_mal else "WINDOWS_CUI",
-            },
-        }
-
+        """Returns the stored scan result for a file. Per-feature attribution is not yet implemented."""
+        if not identifier:
+            return {"available": False, "reason": "Provide ?sha256=<hash> or ?id=<node id>."}
+        for s in self._collect_scanned_samples():
+            sha = s.get("sha256") or ""
+            if identifier in (sha, f"s-{sha[:12]}") or (len(identifier) >= 8 and sha.startswith(identifier)):
+                expl = s.get("explanation")
+                return {
+                    "available": True,
+                    "sample": s,
+                    "feature_attribution": expl,
+                    "feature_attribution_note": None if expl else (
+                        "Attribution is computed by the LightGBM (v2) detector for fresh scans; this result came "
+                        "from the legacy model or the cache."),
+                }
+        return {"available": False, "reason": f"No scanned sample matches '{identifier}'."}
 
     def _get_browse_paths(self) -> Dict[str, Any]:
         """Provides curated system paths and detectable local targets for quick selection."""
@@ -1138,11 +1059,16 @@ class ThreatWeaverRequestHandler(BaseHTTPRequestHandler):
         return {"presets": presets, "drives": drives}
 
     def _serve_html_ui(self) -> None:
-        html = get_apple_minimalist_html()
+        html = get_apple_minimalist_html().replace("__TW_API_TOKEN__", self.api_token, 1)
         raw = html.encode("utf-8")
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Content-Security-Policy", "frame-ancestors 'none'")
+        self.send_header("Referrer-Policy", "no-referrer")
         self.end_headers()
         self.wfile.write(raw)
 
@@ -1157,10 +1083,22 @@ def create_server(
     host: str = "127.0.0.1",
     port: int = DEFAULT_PORT,
     checkpoint_path: Optional[str | Path] = None,
-) -> tuple[ThreadingHTTPServer, str]:
-    """Configures and instantiates the ThreatWeaver HTTP server instance."""
+    bundle_path: Optional[str | Path] = None,
+    backend: str = "fastapi",
+    legacy: bool = False,
+) -> tuple[Any, str]:
+    """Configures the ThreatWeaver server. backend: "fastapi" (uvicorn, default) or "stdlib".
+
+    Both expose serve_forever() / shutdown() / server_close() / api_token and run the same
+    endpoint logic (see threatweaver.app.api.ApiCore)."""
     ckpt = Path(checkpoint_path) if checkpoint_path else DEFAULT_CHECKPOINT
-    engine = InferenceEngine(checkpoint_path=ckpt if ckpt.is_file() else None)
+    bundle_path = resolve_detector_bundle(bundle_path, legacy)
+    try:
+        migrate_legacy_vault()
+    except Exception as e:  # noqa: BLE001 - never block start-up; legacy vault stays intact
+        print(f"[!] Legacy quarantine vault was not migrated: {e}")
+    engine = InferenceEngine(checkpoint_path=ckpt if ckpt.is_file() else None, isolate_extraction=True,
+                             bundle_path=bundle_path)
     state_mgr = ScanStateManager(inference_engine=engine)
     quarantine_mgr = QuarantineManager()
 
@@ -1171,21 +1109,84 @@ def create_server(
     ThreatWeaverRequestHandler.quarantine_mgr = quarantine_mgr
     ThreatWeaverRequestHandler.adaptation_svc = adaptation_svc
 
-    server = ThreadingHTTPServer((host, port), ThreatWeaverRequestHandler)
-    url = f"http://{host}:{port}"
+    token = security.generate_token()
+    ThreatWeaverRequestHandler.api_token = token
+    if backend == "fastapi":
+        try:
+            server = UvicornServer(host, port, token)
+        except ImportError:
+            print("[!] fastapi/uvicorn not installed; falling back to the stdlib server")
+            backend = "stdlib"
+    if backend == "stdlib":
+        server = ThreadingHTTPServer((host, port), ThreatWeaverRequestHandler)
+        server.api_token = token  # type: ignore[attr-defined]
+    bound_port = server.server_address[1]
+    ThreatWeaverRequestHandler.allowed_host_set = security.allowed_hosts(host, bound_port)
+    if backend == "fastapi":
+        server.set_allowed_hosts(ThreatWeaverRequestHandler.allowed_host_set)
+    url = f"http://{host}:{bound_port}"
     return server, url
+
+
+class UvicornServer:
+    """uvicorn-hosted FastAPI app with the same lifecycle methods as ThreadingHTTPServer."""
+
+    def __init__(self, host: str, port: int, token: str):
+        import socket
+
+        import uvicorn  # noqa: F401 - ImportError triggers the stdlib fallback
+        from threatweaver.app.api import create_app  # noqa: F401
+
+        self.api_token = token
+        family = socket.AF_INET6 if ":" in host else socket.AF_INET
+        self._sock = socket.socket(family, socket.SOCK_STREAM)
+        self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 0)
+        self._sock.bind((host, port))
+        self.server_address = self._sock.getsockname()[:2]
+        self._host = host
+        self._server = None
+
+    def set_allowed_hosts(self, hosts: set) -> None:
+        import uvicorn
+        from threatweaver.app.api import create_app
+
+        app = create_app(self.api_token, hosts)
+        config = uvicorn.Config(app, log_level="warning", access_log=False, lifespan="off")
+        self._server = uvicorn.Server(config)
+
+    def serve_forever(self) -> None:
+        self._server.run(sockets=[self._sock])
+
+    def shutdown(self) -> None:
+        if self._server is not None:
+            self._server.should_exit = True
+
+    def server_close(self) -> None:
+        try:
+            self._sock.close()
+        except OSError:
+            pass
 
 
 def run_server(
     host: str = "127.0.0.1",
     port: int = DEFAULT_PORT,
     checkpoint_path: Optional[str | Path] = None,
+    bundle_path: Optional[str | Path] = None,
     open_browser: bool = True,
+    print_token: bool = False,
+    legacy: bool = False,
 ) -> None:
     """Launches the ThreatWeaver local HTTP server."""
-    server, url = create_server(host=host, port=port, checkpoint_path=checkpoint_path)
+    server, url = create_server(host=host, port=port, checkpoint_path=checkpoint_path, bundle_path=bundle_path,
+                                legacy=legacy)
+    print(f"Detector: {ThreatWeaverRequestHandler.engine.model_version}")
 
     print(f"\nThreatWeaver Apple Minimalist UI running at: {url}")
+    if print_token:
+        print(f"API token for scripts (send as {security.TOKEN_HEADER}): {server.api_token}")
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        print(f"WARNING: bound to {host}; the API is reachable from other machines on this network.")
     print("Press Ctrl+C to stop the server.\n")
 
     if open_browser:

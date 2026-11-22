@@ -2,11 +2,11 @@
   "dataset": "EMBER2024",
   "verified": true,
   "location": "C:\\CODE\\ThreatWeaver\\data\\ember2024",
-  "jsonl_files_count": 100,
-  "total_bytes": 17817556332,
-  "samples": 1086315,
-  "benign": 540000,
-  "malicious": 546315,
+  "jsonl_files_count": 204,
+  "total_bytes": 50434709832,
+  "samples": 2646315,
+  "benign": 1320000,
+  "malicious": 1326315,
   "unlabeled": 0,
   "corrupt_records": 0,
   "features": 2381,
@@ -18,8 +18,8 @@
     "Win32": 723225,
     "ELF": 386,
     "PDF": 805,
-    "Win64": 240814,
-    "Dot_Net": 120829,
+    "Win64": 1280814,
+    "Dot_Net": 640829,
     "APK": 256
   },
   "sample_hashes_preview": [
@@ -34,7 +34,7 @@
     "2cfde28a8df3a9925cd116df65ec7862aaff8f10fae5dfb9b4eb30508705daa4",
     "36f86daae16fdf01fd5678312d0bf48957433597dd49634c3c66ec20bcd3cbc3"
   ],
-  "manifest_timestamp": "2026-10-21 15:19:00",
+  "manifest_timestamp": "2026-11-22 07:49:13",
   "license": "Apache-2.0",
   "source": "https://huggingface.co/datasets/joyce8/EMBER2024"
 }

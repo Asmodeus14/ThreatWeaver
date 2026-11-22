@@ -61,7 +61,7 @@ def test_checkpoint_saving_and_loading_variable_dimensions(tmp_path: Path):
         save_checkpoint(model=model, save_path=ckpt_path, sign=True)
 
         assert ckpt_path.is_file()
-        assert ckpt_path.with_suffix(".pt.sig").is_file()
+        assert ckpt_path.with_name(ckpt_path.name + ".ed25519").is_file()
 
         loaded_model, meta = load_checkpoint(ckpt_path)
         assert loaded_model.embedding_dim == dim
@@ -154,11 +154,11 @@ def test_ablation_artifacts_integrity():
     assert "macro_f1" in sel_data["final_untouched_test_results"]
     assert sel_data["final_untouched_test_results"]["macro_f1"] > 0.80
 
-    # Verify all 6 checkpoints exist with HMAC signatures
+    # Verify all 6 checkpoints exist with Ed25519 signatures
     ckpt_dir = Path("artifacts/checkpoints")
     for d in [32, 64, 96, 128, 192, 256]:
         ckpt = ckpt_dir / f"threatweaver_{d}d.pt"
-        sig = ckpt.with_suffix(".pt.sig")
+        sig = ckpt.with_name(ckpt.name + ".ed25519")
         assert ckpt.is_file(), f"Checkpoint {ckpt.name} must exist"
         assert sig.is_file(), f"Signature {sig.name} must exist"
 

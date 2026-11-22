@@ -1,0 +1,21 @@
+{
+  "feature_version": "ember-v3/thrember@0ef753e8",
+  "vectors": {
+    "benign_utility.exe": {
+      "sha256_of_float32_vector": "462d659d207c2fe0f637468086d52e7f758de4601cd62cc7bf16471a57953074",
+      "nonzero": 85
+    },
+    "benign_helper.dll": {
+      "sha256_of_float32_vector": "e87f4591ad20ca17788cea734fb21d2c35eb4766b35c95daa1e7a640f419adfc",
+      "nonzero": 86
+    },
+    "suspicious_packed.exe": {
+      "sha256_of_float32_vector": "dee5a45ba48c4900089e596409c5fa5ec782099788492003a389b2cd19ba1d6c",
+      "nonzero": 89
+    },
+    "novelty_stub.exe": {
+      "sha256_of_float32_vector": "265db198950050e6f0ced8247aad183b06af602e5ef3baf4ba9ca523fcd2fe85",
+      "nonzero": 356
+    }
+  }
+}

@@ -21,6 +21,9 @@ class ScanSummary:
     """Summary counts of verdicts in a scan session."""
     total_scanned: int = 0
     likely_benign: int = 0
+    trusted_signer: int = 0
+    known_malicious: int = 0
+    likely_malicious: int = 0
     suspicious: int = 0
     unfamiliar: int = 0
     unsupported: int = 0
@@ -52,6 +55,12 @@ class ScanReport:
         for r in results:
             if r.verdict == ScanVerdict.LIKELY_BENIGN:
                 summary.likely_benign += 1
+            elif r.verdict == ScanVerdict.TRUSTED_SIGNER:
+                summary.trusted_signer += 1
+            elif r.verdict == ScanVerdict.KNOWN_MALICIOUS:
+                summary.known_malicious += 1
+            elif r.verdict == ScanVerdict.LIKELY_MALICIOUS:
+                summary.likely_malicious += 1
             elif r.verdict == ScanVerdict.SUSPICIOUS:
                 summary.suspicious += 1
             elif r.verdict == ScanVerdict.UNFAMILIAR:
@@ -125,7 +134,10 @@ class ScanReport:
             "|---|---|",
             f"| Total Scanned | {self.summary.total_scanned} |",
             f"| Likely Benign | {self.summary.likely_benign} |",
+            f"| Known Malicious | **{self.summary.known_malicious}** |",
+            f"| Likely Malicious | **{self.summary.likely_malicious}** |",
             f"| Suspicious | **{self.summary.suspicious}** |",
+            f"| Trusted Signer | **{self.summary.trusted_signer}** |",
             f"| Unfamiliar | **{self.summary.unfamiliar}** |",
             f"| Unsupported | {self.summary.unsupported} |",
             f"| Errors | {self.summary.analysis_errors} |",
@@ -150,48 +162,178 @@ class ScanReport:
 
 
 class ScanHistoryManager:
-    """Stores and retrieves local scan history."""
+    """Scan history in SQLite (WAL). Same API/shape as the v0.1 JSON file, without rewriting
+    the whole history on every scan. A legacy reports/scan_history.json is imported once."""
 
-    def __init__(self, history_file: str | Path = "reports/scan_history.json"):
-        self.history_file = Path(history_file).resolve()
-        self.history_file.parent.mkdir(parents=True, exist_ok=True)
+    def __init__(self, history_file: Optional[str | Path] = None, db_path: Optional[str | Path] = None):
+        from threatweaver.core import paths
 
-    def load_history(self) -> List[Dict[str, Any]]:
-        if not self.history_file.is_file():
-            return []
+        legacy: Optional[Path] = None
+        if db_path is None and history_file:
+            db_path, legacy = Path(history_file).with_suffix(".db"), Path(history_file)
+        elif db_path is None:
+            # Default per-user database: import the v0.1 repo-local history once.
+            db_path, legacy = paths.history_db_path(), paths.resource_path("reports/scan_history.json")
+        self.db_path = Path(db_path)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._init()
+        if legacy is not None and legacy.suffix == ".json":
+            self._import_legacy_json(legacy)
+
+    def _connect(self):
+        import sqlite3
+        conn = sqlite3.connect(self.db_path, timeout=10)
+        conn.execute("PRAGMA journal_mode = WAL;")
+        return conn
+
+    def _init(self) -> None:
+        with self._connect() as c:
+            c.executescript("""
+                CREATE TABLE IF NOT EXISTS scans (
+                    scan_id TEXT PRIMARY KEY, target_path TEXT, timestamp TEXT, duration_seconds REAL,
+                    model_version TEXT, summary TEXT NOT NULL, created REAL NOT NULL);
+                CREATE TABLE IF NOT EXISTS results (
+                    scan_id TEXT NOT NULL, idx INTEGER NOT NULL, file_path TEXT, file_name TEXT, file_size_bytes INTEGER,
+                    sha256 TEXT, verdict TEXT, malware_probability REAL, novelty_score REAL, is_novel INTEGER,
+                    evidence TEXT, scan_duration_ms REAL, model_version TEXT, warning_message TEXT,
+                    PRIMARY KEY (scan_id, idx));
+                CREATE INDEX IF NOT EXISTS idx_results_verdict ON results(verdict);
+                CREATE INDEX IF NOT EXISTS idx_results_sha ON results(sha256);
+                CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+            """)
+
+    def _import_legacy_json(self, legacy: Path) -> None:
+        if not legacy.is_file():
+            return
+        with self._connect() as c:
+            if c.execute("SELECT value FROM meta WHERE key = ?", (f"imported:{legacy}",)).fetchone():
+                return
         try:
-            with open(self.history_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return []
+            records = json.loads(legacy.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        for rec in records if isinstance(records, list) else []:
+            self._insert(rec)
+        with self._connect() as c:
+            c.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", (f"imported:{legacy}", time.strftime("%Y-%m-%d %H:%M:%S")))
 
-    def record_scan(self, report: ScanReport) -> None:
-        """Appends scan report to history log."""
-        history = self.load_history()
-        summary_record = {
-            "scan_id": report.scan_id,
-            "target_path": report.target_path,
-            "timestamp": report.start_time,
-            "duration_seconds": report.duration_seconds,
-            "summary": asdict(report.summary),
-            "results": [
-                {
-                    "file_path": r.file_path,
-                    "file_name": r.file_name,
-                    "file_size_bytes": r.file_size_bytes,
-                    "sha256": r.sha256,
-                    "verdict": r.verdict.value,
-                    "malware_probability": round(r.malware_probability, 4),
-                    "novelty_score": round(r.novelty_score, 4),
-                    "is_novel": r.is_novel,
-                    "evidence_points": r.evidence_points,
-                    "scan_duration_ms": round(r.scan_duration_ms, 2),
-                    "nearest_known_cluster": r.nearest_known_cluster,
-                    "warning_message": r.warning_message,
-                }
-                for r in report.results[:100]
-            ],
+    def _insert(self, rec: Dict[str, Any]) -> None:
+        with self._connect() as c:
+            c.execute("INSERT OR IGNORE INTO scans VALUES (?, ?, ?, ?, ?, ?, ?)", (
+                rec.get("scan_id"), rec.get("target_path"), rec.get("timestamp"), rec.get("duration_seconds"),
+                rec.get("model_version"), json.dumps(rec.get("summary", {})), time.time()))
+            c.executemany("INSERT OR IGNORE INTO results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
+                (rec.get("scan_id"), i, r.get("file_path"), r.get("file_name"), r.get("file_size_bytes"), r.get("sha256"),
+                 r.get("verdict"), r.get("malware_probability"), r.get("novelty_score"), int(bool(r.get("is_novel"))),
+                 json.dumps(r.get("evidence_points", [])), r.get("scan_duration_ms"), r.get("model_version"),
+                 r.get("warning_message"))
+                for i, r in enumerate(rec.get("results", []))])
+
+    def record_scan(self, report: "ScanReport") -> None:
+        d = report.to_dict()
+        self._insert({
+            "scan_id": d["scan_id"], "target_path": d["target_path"], "timestamp": d["start_time"],
+            "duration_seconds": d["duration_seconds"], "model_version": d["model_version"], "summary": d["summary"],
+            "results": [dict(r, model_version=report.results[i].model_version) for i, r in enumerate(d["results"])],
+        })
+
+    def _results(self, c, scan_id: str) -> List[Dict[str, Any]]:
+        rows = c.execute("SELECT file_path, file_name, file_size_bytes, sha256, verdict, malware_probability, "
+                         "novelty_score, is_novel, evidence, scan_duration_ms, model_version, warning_message "
+                         "FROM results WHERE scan_id = ? ORDER BY idx", (scan_id,)).fetchall()
+        keys = ("file_path", "file_name", "file_size_bytes", "sha256", "verdict", "malware_probability",
+                "novelty_score", "is_novel", "evidence_points", "scan_duration_ms", "model_version", "warning_message")
+        out = []
+        for row in rows:
+            r = dict(zip(keys, row))
+            r["is_novel"] = bool(r["is_novel"])
+            r["evidence_points"] = json.loads(r["evidence_points"] or "[]")
+            out.append(r)
+        return out
+
+    def load_history(self, limit: Optional[int] = None, include_results: bool = True) -> List[Dict[str, Any]]:
+        """Oldest first (v0.1 order). `limit` keeps the most recent N scans."""
+        with self._connect() as c:
+            q = "SELECT scan_id, target_path, timestamp, duration_seconds, model_version, summary FROM scans ORDER BY created"
+            scans = c.execute(q).fetchall()
+            if limit:
+                scans = scans[-limit:]
+            out = []
+            for sid, target, ts, dur, mv, summary in scans:
+                rec = {"scan_id": sid, "target_path": target, "timestamp": ts, "duration_seconds": dur,
+                       "model_version": mv, "summary": json.loads(summary)}
+                if include_results:
+                    rec["results"] = self._results(c, sid)
+                out.append(rec)
+            return out
+
+    ATTENTION_VERDICTS = ("Known Malicious", "Likely Malicious", "Suspicious",
+                          "Unfamiliar / Out-of-Distribution", "Analysis Error")
+
+    def insights(self, model_id: Optional[str] = None, bins: int = 40, days: int = 30) -> Dict[str, Any]:
+        """Aggregates for the overview, from real scan history only.
+
+        Each file counts once, at its most recent verdict (keyed by SHA-256, else path).
+        `score_histogram` covers only files whose latest result came from `model_id`, so scores
+        from different detectors are never mixed. `daily` counts every result per scan day."""
+        latest_sql = (
+            "SELECT verdict, malware_probability, model_version FROM ("
+            " SELECT r.verdict, r.malware_probability, r.model_version, ROW_NUMBER() OVER ("
+            "  PARTITION BY COALESCE(NULLIF(r.sha256, ''), r.file_path) ORDER BY s.created DESC, r.idx DESC) AS rn"
+            " FROM results r JOIN scans s USING (scan_id)) WHERE rn = 1")
+        flagged = ",".join("?" * len(self.ATTENTION_VERDICTS))
+        daily_sql = (
+            "SELECT substr(s.timestamp, 1, 10) AS day, COUNT(*), "
+            f"SUM(CASE WHEN r.verdict IN ({flagged}) THEN 1 ELSE 0 END) "
+            "FROM results r JOIN scans s USING (scan_id) WHERE s.timestamp IS NOT NULL "
+            "GROUP BY day ORDER BY day DESC LIMIT ?")
+        counts: Dict[str, int] = {}
+        hist = [0] * bins
+        by_verdict: Dict[str, List[int]] = {}
+        hist_n = 0
+        with self._connect() as c:
+            for verdict, prob, mv in c.execute(latest_sql):
+                counts[verdict or "Unknown"] = counts.get(verdict or "Unknown", 0) + 1
+                unscored = verdict in ("Analysis Error", "Unsupported Format")  # no model score; never plot at 0%
+                if model_id and mv and not unscored and model_id in mv.replace("(", " ").split() and prob is not None:
+                    b = min(bins - 1, max(0, int(float(prob) * bins)))
+                    hist[b] += 1
+                    by_verdict.setdefault(verdict or "Unknown", [0] * bins)[b] += 1
+                    hist_n += 1
+            daily = [{"day": d, "scanned": n, "flagged": f or 0}
+                     for d, n, f in c.execute(daily_sql, (*self.ATTENTION_VERDICTS, int(days))).fetchall()]
+        return {
+            "unique_files": sum(counts.values()),
+            "verdict_counts": counts,
+            "score_histogram": {"model_id": model_id, "bins": bins, "counts": hist, "n": hist_n,
+                                "by_verdict": by_verdict},
+            "daily": list(reversed(daily)),
         }
-        history.append(summary_record)
-        with open(self.history_file, "w", encoding="utf-8") as f:
-            json.dump(history, f, indent=2)
+
+    def search_results(self, verdicts: Optional[List[str]] = None, text: Optional[str] = None,
+                       limit: int = 200) -> List[Dict[str, Any]]:
+        """Detections across all scans, newest first (for the Detections view)."""
+        sql = ("SELECT r.scan_id, s.timestamp, r.file_path, r.file_name, r.sha256, r.verdict, r.malware_probability, "
+               "r.file_size_bytes, r.novelty_score, r.is_novel, r.evidence, r.scan_duration_ms, r.model_version, "
+               "r.warning_message FROM results r JOIN scans s USING (scan_id) WHERE 1=1")
+        args: List[Any] = []
+        if verdicts:
+            sql += f" AND r.verdict IN ({','.join('?' * len(verdicts))})"
+            args += verdicts
+        if text:
+            sql += " AND (r.file_path LIKE ? OR r.sha256 LIKE ?)"
+            args += [f"%{text}%", f"{text.lower()}%"]
+        sql += " ORDER BY s.created DESC, r.idx LIMIT ?"
+        args.append(int(limit))
+        keys = ("scan_id", "timestamp", "file_path", "file_name", "sha256", "verdict", "malware_probability",
+                "file_size_bytes", "novelty_score", "is_novel", "evidence_points", "scan_duration_ms", "model_version",
+                "warning_message")
+        with self._connect() as c:
+            out = []
+            for row in c.execute(sql, args).fetchall():
+                d = dict(zip(keys, row))
+                d["is_novel"] = bool(d["is_novel"])
+                d["evidence_points"] = json.loads(d["evidence_points"] or "[]")
+                d["model_version"] = d["model_version"] or ""
+                out.append(d)
+            return out

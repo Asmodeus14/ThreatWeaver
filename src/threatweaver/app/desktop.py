@@ -35,7 +35,7 @@ def launch_desktop(
     ready = False
     for _ in range(40):
         try:
-            with urllib.request.urlopen(f"{url}/api/browse-paths", timeout=0.5) as resp:
+            with urllib.request.urlopen(f"{url}/", timeout=0.5) as resp:
                 if resp.status == 200:
                     ready = True
                     break

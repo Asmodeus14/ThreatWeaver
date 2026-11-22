@@ -8,7 +8,7 @@ dist/
 build/
 
 # ThreatWeaver Raw Datasets & Large Archives
-data/
+/data/
 *.zip
 
 # Runtime Storage & User State
@@ -27,3 +27,10 @@ htmlcov/
 .idea/
 Thumbs.db
 Desktop.ini
+
+# Locally adapted model versions (user-specific)
+artifacts/models/local/
+
+# Research by-products (weights reproducible from tools/train_mlp_v3.py)
+artifacts/models/mlp-*/model.pt*
+artifacts/models/mlp-*/reference_bank.npy*

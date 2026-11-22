@@ -14,4 +14,8 @@ if str(src_dir) not in sys.path:
 from threatweaver.app.desktop import launch_desktop
 
 if __name__ == "__main__":
+    # Required for the PyInstaller build: parsing workers are spawned processes, and without
+    # freeze_support() each worker would relaunch the whole desktop app.
+    import multiprocessing
+    multiprocessing.freeze_support()
     launch_desktop()

@@ -50,3 +50,28 @@ def test_watcher_lifecycle(tmp_path: Path):
 
     watcher.stop()
     assert watcher.is_running() is False
+
+
+def test_watcher_reacts_to_new_files_not_existing_ones(tmp_path: Path):
+    """Event mode: files present before start are not rescanned; a new file is scanned once."""
+    pre = create_minimal_pe(tmp_path / "already_there.exe")
+    scanned = []
+    engine = InferenceEngine(enable_hash_cache=False)
+    watcher = RealtimeFileWatcher(watch_directory=tmp_path, inference_engine=engine)
+    original = engine.analyze_file
+    engine.analyze_file = lambda p, **kw: (scanned.append(Path(p).name), original(p, **kw))[1]
+    watcher.start()
+    try:
+        time.sleep(1.0)
+        create_minimal_pe(tmp_path / "sub" / "dropped.exe") if (tmp_path / "sub").mkdir() is None else None
+        (tmp_path / "notes.txt").write_text("not a PE")
+        deadline = time.time() + 10
+        while time.time() < deadline and "dropped.exe" not in scanned:
+            time.sleep(0.2)
+    finally:
+        watcher.stop()
+    assert watcher.mode in ("events", "polling")
+    assert "dropped.exe" in scanned
+    assert "already_there.exe" not in scanned
+    assert "notes.txt" not in scanned
+    assert pre.exists()  # observational: never modifies files

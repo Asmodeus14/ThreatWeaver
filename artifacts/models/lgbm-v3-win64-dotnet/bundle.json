@@ -1,0 +1,224 @@
+{
+  "id": "lgbm-v3-win64-dotnet",
+  "kind": "lightgbm-binary",
+  "feature_version": "ember-v3/thrember@0ef753e8",
+  "feature_dim": 2568,
+  "model_file": "model.txt",
+  "model_sha256": "46b3d26b2f1beedc075f7a7a3ecded5f2eb20d76e5a0fd051d15b74aa125378d",
+  "calibration": {
+    "method": "platt_on_raw_margin",
+    "a": 0.8256542372517381,
+    "b": 0.000727136065308785,
+    "fit_on": "val"
+  },
+  "thresholds": {
+    "tau_high_fpr_0.1pct": 0.9815474888334033,
+    "tau_low_fpr_1pct": 0.789287999774916
+  },
+  "params": {
+    "objective": "binary",
+    "metric": [
+      "auc",
+      "binary_logloss"
+    ],
+    "num_leaves": 64,
+    "min_data_in_leaf": 100,
+    "learning_rate": 0.1,
+    "num_threads": 12,
+    "seed": 0,
+    "deterministic": true,
+    "verbose": -1
+  },
+  "num_trees": 500,
+  "train_seconds": 211.0,
+  "dataset_manifest_sha256": "2e411832cb4172c679adbdb14e64cf8a720013dde64c02f64d6699a95154e17c",
+  "dataset_splits": {
+    "train": {
+      "rows": 300000,
+      "benign": 149924,
+      "malicious": 150076,
+      "vectorize_failures": 0
+    },
+    "val": {
+      "rows": 120000,
+      "benign": 60000,
+      "malicious": 60000,
+      "vectorize_failures": 0
+    },
+    "test": {
+      "rows": 179946,
+      "benign": 89946,
+      "malicious": 90000,
+      "vectorize_failures": 0
+    },
+    "challenge": {
+      "rows": 1643,
+      "benign": 0,
+      "malicious": 1643,
+      "vectorize_failures": 0
+    }
+  },
+  "top_features_by_gain": [
+    {
+      "feature": 739,
+      "gain": 892984.4678925872
+    },
+    {
+      "feature": 2478,
+      "gain": 257498.26856058836
+    },
+    {
+      "feature": 618,
+      "gain": 51203.2852152586
+    },
+    {
+      "feature": 113,
+      "gain": 29844.715025663376
+    },
+    {
+      "feature": 596,
+      "gain": 25925.32568013668
+    },
+    {
+      "feature": 2409,
+      "gain": 24066.013829767704
+    },
+    {
+      "feature": 2547,
+      "gain": 23220.885449051857
+    },
+    {
+      "feature": 564,
+      "gain": 21851.068764567375
+    },
+    {
+      "feature": 2417,
+      "gain": 18530.466207683086
+    },
+    {
+      "feature": 725,
+      "gain": 18257.407987356186
+    },
+    {
+      "feature": 2405,
+      "gain": 18202.4025554657
+    },
+    {
+      "feature": 724,
+      "gain": 17387.15512597561
+    },
+    {
+      "feature": 2479,
+      "gain": 16969.32472705841
+    },
+    {
+      "feature": 2413,
+      "gain": 16873.614969551563
+    },
+    {
+      "feature": 475,
+      "gain": 16073.502757191658
+    },
+    {
+      "feature": 579,
+      "gain": 15907.63548386097
+    },
+    {
+      "feature": 2418,
+      "gain": 13553.564293146133
+    },
+    {
+      "feature": 751,
+      "gain": 13015.092624306679
+    },
+    {
+      "feature": 664,
+      "gain": 12711.391142010689
+    },
+    {
+      "feature": 520,
+      "gain": 12470.402285933495
+    },
+    {
+      "feature": 2414,
+      "gain": 11871.50834107399
+    },
+    {
+      "feature": 994,
+      "gain": 11619.708138108253
+    },
+    {
+      "feature": 2415,
+      "gain": 10133.559092760086
+    },
+    {
+      "feature": 603,
+      "gain": 9327.40765351057
+    },
+    {
+      "feature": 874,
+      "gain": 9193.147350430489
+    },
+    {
+      "feature": 696,
+      "gain": 8330.090553164482
+    },
+    {
+      "feature": 692,
+      "gain": 8177.865255951881
+    },
+    {
+      "feature": 800,
+      "gain": 8100.7154240608215
+    },
+    {
+      "feature": 649,
+      "gain": 8033.135138571262
+    },
+    {
+      "feature": 2477,
+      "gain": 7847.4977642297745
+    },
+    {
+      "feature": 706,
+      "gain": 7594.414817452431
+    },
+    {
+      "feature": 129,
+      "gain": 6965.432911157608
+    },
+    {
+      "feature": 716,
+      "gain": 6611.385792195797
+    },
+    {
+      "feature": 628,
+      "gain": 6513.094883680344
+    },
+    {
+      "feature": 991,
+      "gain": 6468.609683513641
+    },
+    {
+      "feature": 642,
+      "gain": 6359.407876253128
+    },
+    {
+      "feature": 471,
+      "gain": 5804.045777797699
+    },
+    {
+      "feature": 2429,
+      "gain": 5591.823820590973
+    },
+    {
+      "feature": 2411,
+      "gain": 4781.6958664655685
+    },
+    {
+      "feature": 577,
+      "gain": 4736.96374475956
+    }
+  ],
+  "created_utc": "2026-11-22T02:30:37Z"
+}

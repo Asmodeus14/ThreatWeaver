@@ -5,6 +5,10 @@ import pytest
 import torch
 from pathlib import Path
 
+import base64
+import json
+
+from threatweaver.models import signing
 from threatweaver.models.classifier import ThreatClassifier, load_checkpoint, save_checkpoint
 from threatweaver.models.encoder import ThreatEncoder
 from threatweaver.models.novelty import NoveltyDetector
@@ -53,7 +57,7 @@ def test_save_and_load_checkpoint(tmp_path: Path):
     )
 
     # Verify signature file was created
-    assert ckpt_path.with_suffix(".pt.sig").is_file()
+    assert ckpt_path.with_name(ckpt_path.name + ".ed25519").is_file()
 
     loaded_model, meta = load_checkpoint(ckpt_path, device="cpu")
     assert meta["schema_version"] == "1.0"
@@ -70,15 +74,13 @@ def test_save_and_load_checkpoint(tmp_path: Path):
 
 
 def test_checkpoint_tamper_detection(tmp_path: Path):
-    """Verifies that tampering with checkpoint payload causes HMAC integrity failure."""
+    """Tampering with checkpoint bytes invalidates the Ed25519 signature."""
     model = ThreatClassifier(input_dim=256, num_classes=2)
     ckpt_path = tmp_path / "tampered.pt"
 
     save_checkpoint(model=model, save_path=ckpt_path)
-    sig_path = ckpt_path.with_suffix(".pt.sig")
-    assert sig_path.is_file()
+    assert signing.signature_path(ckpt_path).is_file()
 
-    # Tamper with checkpoint bytes
     with open(ckpt_path, "r+b") as f:
         f.seek(10)
         original_byte = f.read(1)
@@ -90,30 +92,62 @@ def test_checkpoint_tamper_detection(tmp_path: Path):
 
 
 def test_checkpoint_signature_mismatch(tmp_path: Path):
-    """Verifies that an invalid signature causes load_checkpoint to fail."""
+    """A forged signature value is rejected."""
     model = ThreatClassifier(input_dim=256, num_classes=2)
     ckpt_path = tmp_path / "bad_sig.pt"
-
     save_checkpoint(model=model, save_path=ckpt_path)
-    sig_path = ckpt_path.with_suffix(".pt.sig")
-    sig_path.write_text("0000000000000000000000000000000000000000000000000000000000000000")
+    sig_p = signing.signature_path(ckpt_path)
+    rec = json.loads(sig_p.read_text(encoding="utf-8"))
+    rec["signature"] = base64.b64encode(bytes(64)).decode()
+    sig_p.write_text(json.dumps(rec), encoding="utf-8")
 
     with pytest.raises(ValueError, match="integrity verification failed"):
         load_checkpoint(ckpt_path)
 
 
-def test_unsigned_checkpoint_warning(tmp_path: Path):
-    """Verifies that loading an unsigned checkpoint emits a warning."""
+def test_checkpoint_signed_by_untrusted_key_rejected(tmp_path: Path):
+    """Re-signing a modified checkpoint with an attacker's own key does not make it trusted."""
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    model = ThreatClassifier(input_dim=256, num_classes=2)
+    ckpt_path = tmp_path / "attacker.pt"
+    save_checkpoint(model=model, save_path=ckpt_path, sign=False)
+    signing.sign_file(ckpt_path, key=Ed25519PrivateKey.generate(), role="release")
+
+    with pytest.raises(ValueError, match="unknown key"):
+        load_checkpoint(ckpt_path)
+
+
+def test_legacy_hmac_sig_alone_is_not_trusted(tmp_path: Path):
+    """v0.1 HMAC .sig files (key was public in the source) no longer grant trust."""
+    model = ThreatClassifier(input_dim=256, num_classes=2)
+    ckpt_path = tmp_path / "legacy.pt"
+    save_checkpoint(model=model, save_path=ckpt_path, sign=False)
+    ckpt_path.with_suffix(".pt.sig").write_text("deadbeef", encoding="utf-8")
+    with pytest.raises(ValueError, match="integrity verification failed"):
+        load_checkpoint(ckpt_path)
+
+
+def test_unsigned_checkpoint_refused_by_default(tmp_path: Path):
+    """Fail-closed: unsigned checkpoints are refused unless explicitly allowed for research."""
     model = ThreatClassifier(input_dim=256, num_classes=2)
     ckpt_path = tmp_path / "unsigned.pt"
-
     save_checkpoint(model=model, save_path=ckpt_path, sign=False)
-    sig_path = ckpt_path.with_suffix(".pt.sig")
-    assert not sig_path.exists()
+    assert not signing.signature_path(ckpt_path).exists()
 
-    with pytest.warns(UserWarning, match="Loading unsigned checkpoint"):
-        loaded, _ = load_checkpoint(ckpt_path)
+    with pytest.raises(ValueError, match="integrity verification failed"):
+        load_checkpoint(ckpt_path)
+
+    with pytest.warns(UserWarning, match="unsigned or unverified"):
+        loaded, _ = load_checkpoint(ckpt_path, allow_unsigned=True)
         assert loaded is not None
+
+
+def test_shipped_checkpoints_carry_valid_release_signatures():
+    repo = Path(__file__).resolve().parent.parent
+    for ckpt in sorted((repo / "artifacts" / "checkpoints").glob("*.pt")):
+        res = signing.verify_file(ckpt)
+        assert res.valid and res.role == "release", (ckpt.name, res.reason)
 
 
 def test_novelty_detector_calibration_and_evaluation():

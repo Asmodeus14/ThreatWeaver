@@ -22,9 +22,29 @@ from threatweaver.scanner.hash_cache import CleanHashCache
 from threatweaver.scanner.signature_verifier import WindowsSignatureVerifier
 
 
+from threatweaver.core.paths import resource_path as _resource_path
+
+SHIPPED_CHECKPOINT_DIR = _resource_path("artifacts/checkpoints")
+VERDICT_POLICY_VERSION = "v0.1-policy-2"  # bump whenever verdict logic changes (invalidates cache)
+
+
+def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(chunk_size):
+            h.update(chunk)
+    return h.hexdigest()
+LOCAL_MODELS_DIR: Optional[Path] = None  # None -> threatweaver.core.paths.local_models_dir()
+
+
 class ScanVerdict(str, Enum):
     """Calibrated security verdict for a scanned file."""
     LIKELY_BENIGN = "Likely Benign"
+    TRUSTED_SIGNER = "Trusted Signer"
+    LIKELY_MALICIOUS = "Likely Malicious"
+    KNOWN_MALICIOUS = "Known Malicious"
     SUSPICIOUS = "Suspicious"
     UNFAMILIAR = "Unfamiliar / Out-of-Distribution"
     UNSUPPORTED = "Unsupported Format"
@@ -48,6 +68,7 @@ class ScanResult:
     raw_indicators: List[str] = field(default_factory=list)
     nearest_known_cluster: Optional[str] = None
     warning_message: Optional[str] = None
+    explanation: Optional[Dict[str, Any]] = None  # grouped TreeSHAP attribution (v2 detector only)
 
 
 class InferenceEngine:
@@ -61,10 +82,17 @@ class InferenceEngine:
         enable_signature_verifier: bool = True,
         enable_hash_cache: bool = True,
         cache_db_path: Optional[str | Path] = None,
+        isolate_extraction: bool = False,
+        extraction_timeout_s: float = 15.0,
+        extraction_memory_mb: int = 1024,
+        extraction_workers: int = 2,
+        bundle_path: Optional[str | Path] = None,
+        rules_dir: Optional[str | Path] = None,
     ):
         self.device = torch.device(device)
         self.threshold = classification_threshold
         self.checkpoint_path: Optional[Path] = Path(checkpoint_path).resolve() if checkpoint_path else None
+        self._source_checkpoints: set = set()
         self.model: Optional[ThreatClassifier] = None
         self.scaler: Optional[FeatureScaler] = None
         self.novelty_detector: Optional[NoveltyDetector] = None
@@ -73,14 +101,30 @@ class InferenceEngine:
         self.model_version = "Unloaded"
         self.signature_verifier = WindowsSignatureVerifier(enabled=enable_signature_verifier)
         self.hash_cache = CleanHashCache(db_path=cache_db_path, enabled=enable_hash_cache)
+        self.extraction_pool = None
+        if isolate_extraction:
+            from threatweaver.sandboxing import ExtractionPool
+            self.extraction_pool = ExtractionPool(
+                workers=extraction_workers, timeout_s=extraction_timeout_s, memory_limit_mb=extraction_memory_mb)
 
         if checkpoint_path and Path(checkpoint_path).is_file():
             self.load_model(checkpoint_path)
+
+        # v2 detector: signed LightGBM bundle on EMBER2024 v3 features (takes precedence when loaded)
+        self.bundle = None
+        if bundle_path:
+            from threatweaver.models.bundle import LGBMBundle
+            self.bundle = LGBMBundle.load(bundle_path)
+            self.model_version = f"{self.bundle.id} (LightGBM, EMBER v3)"
+        from threatweaver.detectors.known_bad import KnownBadDetector
+        self.known_bad = KnownBadDetector(rules_dir)
+        self.threat_intel = None  # created lazily; opt-in only (see detectors/threat_intel.py)
 
     def load_model(self, checkpoint_path: str | Path) -> None:
         """Loads and initializes model from safe checkpoint."""
         ckpt_path = Path(checkpoint_path).resolve()
         self.checkpoint_path = ckpt_path
+        self._source_checkpoints.add(ckpt_path)
         model, meta = load_checkpoint(ckpt_path, device=self.device)
         self.model = model
         self.model.eval()
@@ -111,14 +155,190 @@ class InferenceEngine:
         self.checkpoint_loaded = True
         self.model_version = f"ThreatWeaver-v{meta.get('schema_version', '1.0')}"
 
-    def save_state(self, target_path: Optional[str | Path] = None) -> Path:
-        """Safely saves model weights, scaler statistics, and prototypes with HMAC signature."""
+    def _analyze_with_bundle(self, path: Path, file_size: int, file_sha256: str, fingerprint: str,
+                             start_t: float, bypass_signature: bool) -> "ScanResult":
+        """v2 pipeline: EMBER v3 features -> calibrated LightGBM -> verdict policy.
+
+        The Authenticode result is passed to the policy as evidence; it never skips the model.
+        """
+        import time
+
+        from threatweaver.core.policy import Evidence, decide
+
+        if self.extraction_pool is not None:
+            from threatweaver.sandboxing import ExtractionFailure
+            # thrember's string features cost ~0.75 s/MB on large files: scale the timeout with size.
+            timeout = min(180.0, self.extraction_pool.timeout_s + file_size / (1024 * 1024))
+            parsed = self.extraction_pool.run("v3_with_indicators", str(path), timeout_s=timeout)
+            if isinstance(parsed, ExtractionFailure):
+                parsed = {"failure": f"{parsed.reason}: {parsed.detail}"}
+        else:
+            from threatweaver.sandboxing.pool import _task_v3_with_indicators
+            try:
+                parsed = _task_v3_with_indicators(str(path))
+            except Exception as e:  # noqa: BLE001 - surfaced as an analysis error
+                parsed = {"failure": f"error: {type(e).__name__}: {e}"}
+
+        sig = None
+        if self.signature_verifier.enabled and not bypass_signature and parsed.get("is_pe"):
+            sig = self.signature_verifier.verify_file(path)
+
+        p_mal = None
+        explanation = None
+        if parsed.get("is_pe") and parsed.get("vector") is not None:
+            p_mal = float(self.bundle.predict_proba(parsed["vector"])[0])
+            try:
+                from threatweaver.explain.shap_groups import explain
+                explanation = explain(self.bundle.booster, parsed["vector"])
+            except Exception:  # noqa: BLE001 - an explanation failure must not block the verdict
+                explanation = None
+
+        kb = self.known_bad.check(file_sha256, path) if parsed.get("is_pe") else None
+        intel = None
+        if parsed.get("is_pe") and file_sha256:
+            from threatweaver.detectors.threat_intel import MalwareBazaarLookup, load_config
+            if load_config().get("enabled"):
+                self.threat_intel = self.threat_intel or MalwareBazaarLookup()
+                intel = self.threat_intel.lookup(file_sha256)
+        known = kb.match if kb and not kb.allowlisted else None
+        if known is None and intel is not None and intel.status == "listed":
+            known = f"MalwareBazaar listing ({intel.signature or 'unnamed family'})"
+        decision = decide(Evidence(
+            parse_ok="failure" not in parsed,
+            is_pe=bool(parsed.get("is_pe", True)),
+            p_malicious=p_mal,
+            tau_high=self.bundle.tau_high,
+            tau_low=self.bundle.tau_low,
+            signature_trusted=bool(sig and sig.is_trusted),
+            signer=(sig.subject if sig else None),
+            is_novel=None,
+            known_bad=known,
+            parse_error=parsed.get("failure") or parsed.get("error"),
+        ))
+        evidence = list(decision.reasons)
+        if explanation is not None:
+            from threatweaver.explain.shap_groups import summarize
+            evidence.extend(f"Model attribution: {line}" for line in summarize(explanation))
+        if kb is not None:
+            if kb.allowlisted:
+                evidence.append("Known-bad checks skipped: this SHA-256 is on your local allowlist.")
+            if kb.yara_error:
+                evidence.append(f"YARA scan error: {kb.yara_error}")
+        if intel is not None and intel.status != "disabled":
+            evidence.append({
+                "listed": f"Threat intel: listed on MalwareBazaar as {intel.signature or 'malware'} (first seen {intel.first_seen}).",
+                "not_listed": "Threat intel: not listed on MalwareBazaar (absence is not evidence of safety).",
+                "error": f"Threat intel lookup failed: {intel.detail}",
+            }[intel.status])
+        if sig is not None:
+            evidence.append(f"Authenticode: {'valid' if sig.is_trusted else 'not trusted'} ({sig.provider}; {sig.details})")
+        sev_rank = {"high": 0, "medium": 1, "low": 2}
+        for i in sorted(parsed.get("indicators", []), key=lambda d: sev_rank.get(d.get("severity"), 3)):
+            evidence.append(f"Static indicator [{i['severity']}]: {i['text']}")
+
+        res = ScanResult(
+            file_path=str(path),
+            file_name=path.name,
+            file_size_bytes=file_size,
+            sha256=file_sha256,
+            verdict=ScanVerdict(decision.verdict),
+            malware_probability=p_mal if p_mal is not None else 0.0,
+            novelty_score=0.0,
+            is_novel=False,
+            evidence_points=evidence,
+            scan_duration_ms=(time.time() - start_t) * 1000.0,
+            model_version=self.model_version,
+            raw_indicators=[i["id"] for i in parsed.get("indicators", [])],
+            nearest_known_cluster=None,
+            warning_message=None if p_mal is not None else "No model score; treat as unknown, not benign.",
+            explanation=explanation,
+        )
+        if self.hash_cache.enabled and file_sha256:
+            self.hash_cache.record_scan_result(res, fingerprint, source="LightGBM")
+        return res
+
+    def close(self) -> None:
+        """Stops isolated parsing workers and closes the cache."""
+        if self.extraction_pool is not None:
+            self.extraction_pool.close()
+            self.extraction_pool = None
+        self.hash_cache.close()
+
+    def cache_fingerprint(self) -> str:
+        """Identifies everything that can change a verdict for identical file bytes."""
+        import hashlib
+
+        if self.checkpoint_path and self.checkpoint_path.is_file():
+            key = (str(self.checkpoint_path), self.checkpoint_path.stat().st_mtime_ns)
+            if getattr(self, "_ckpt_digest_key", None) != key:
+                self._ckpt_digest = sha256_file(self.checkpoint_path)
+                self._ckpt_digest_key = key
+            ckpt_digest = self._ckpt_digest
+        else:
+            ckpt_digest = "no-model"
+        nd = self.novelty_detector
+        if getattr(self, "bundle", None) is not None:
+            from threatweaver.core.policy import POLICY_VERSION
+            parts = [POLICY_VERSION, self.bundle.file_sha256(), f"tauh={self.bundle.tau_high:.6f}",
+                     f"taul={self.bundle.tau_low:.6f}", f"sig={int(self.signature_verifier.enabled)}",
+                     f"kb={self.known_bad.version}", f"intel={int(self._intel_enabled())}"]
+            return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:32]
+        parts = [
+            VERDICT_POLICY_VERSION,
+            ckpt_digest if self.checkpoint_loaded else "no-model",
+            f"thr={self.threshold:.6f}",
+            f"tau={nd.threshold:.6f}" if nd else "tau=none",
+            f"protos={len(nd.prototypes)}" if nd else "protos=0",
+            f"sig={int(self.signature_verifier.enabled)}",
+        ]
+        return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:32]
+
+    @staticmethod
+    def _intel_enabled() -> bool:
+        from threatweaver.detectors.threat_intel import load_config
+        return bool(load_config().get("enabled"))
+
+    def _is_protected_checkpoint(self, path: Path) -> bool:
+        """Shipped checkpoints and any checkpoint this engine loaded from are read-only."""
+        resolved = path.resolve()
+        if resolved in self._source_checkpoints:
+            return True
+        try:
+            resolved.relative_to(SHIPPED_CHECKPOINT_DIR.resolve())
+            return True
+        except ValueError:
+            return False
+
+    def save_state(self, target_path: Optional[str | Path] = None, reason: str = "local update") -> Path:
+        """Saves the current model state as a NEW versioned checkpoint and returns its path.
+
+        Never overwrites a shipped checkpoint (artifacts/checkpoints/) or the file the
+        engine was loaded from. Without target_path, writes
+        artifacts/models/local/<parent-stem>_local_<UTC timestamp>.pt and records the
+        lineage in artifacts/models/local/index.json.
+        """
+        import hashlib
+        import json
+        import time
+
         if self.model is None:
             raise ValueError("Cannot save state: No model loaded.")
-        dest = Path(target_path).resolve() if target_path else self.checkpoint_path
-        if dest is None:
-            dest = Path("artifacts/checkpoints/threatweaver_v1.pt").resolve()
+        if target_path is not None:
+            dest = Path(target_path).resolve()
+            if self._is_protected_checkpoint(dest):
+                raise PermissionError(f"Refusing to overwrite protected checkpoint: {dest}")
+        else:
+            parent_stem = self.checkpoint_path.stem.split("_local_")[0] if self.checkpoint_path else "threatweaver"
+            stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+            from threatweaver.core.paths import local_models_dir
+            base_dir = LOCAL_MODELS_DIR or local_models_dir()
+            dest = (base_dir / f"{parent_stem}_local_{stamp}.pt").resolve()
+            n = 1
+            while dest.exists():
+                dest = (base_dir / f"{parent_stem}_local_{stamp}_{n}.pt").resolve()
+                n += 1
         dest.parent.mkdir(parents=True, exist_ok=True)
+        parent_path = str(self.checkpoint_path) if self.checkpoint_path else None
 
         f_mean = self.scaler.mean.tolist() if (self.scaler and self.scaler.fitted) else None
         f_std = self.scaler.std.tolist() if (self.scaler and self.scaler.fitted) else None
@@ -132,10 +352,29 @@ class InferenceEngine:
             feature_std=f_std,
             novelty_threshold=nov_thresh,
             prototypes=protos,
-            metadata={"description": "Active operational ThreatWeaver model with learned prototypes"},
+            metadata={
+                "description": "Locally modified ThreatWeaver model",
+                "parent_checkpoint": parent_path,
+                "reason": reason,
+            },
             sign=True,
         )
         self.checkpoint_path = saved_path
+
+        index_path = saved_path.parent / "index.json"
+        try:
+            index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.is_file() else []
+        except Exception:
+            index = []
+        index.append({
+            "path": str(saved_path),
+            "parent": parent_path,
+            "reason": reason,
+            "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "sha256": hashlib.sha256(saved_path.read_bytes()).hexdigest(),
+            "prototypes": len(protos),
+        })
+        index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
         return saved_path
 
     def register_prototype_from_sample(
@@ -143,7 +382,7 @@ class InferenceEngine:
         file_path: str | Path,
         label: int,
         family_name: str,
-        persist: bool = True,
+        persist: bool = False,
     ) -> Dict[str, Any]:
         """Extracts embedding from sample and registers it as a new prototype centroid (Option A)."""
         p = Path(file_path).resolve()
@@ -179,8 +418,9 @@ class InferenceEngine:
         if self.hash_cache.enabled and extracted.sha256:
             self.hash_cache.remove(extracted.sha256)
 
-        if persist and self.checkpoint_path:
-            self.save_state(self.checkpoint_path)
+        saved_to = None
+        if persist:
+            saved_to = str(self.save_state(reason=f"prototype '{family_name}' registered from {p.name}"))
 
         return {
             "status": "success",
@@ -189,6 +429,7 @@ class InferenceEngine:
             "total_prototypes": len(self.novelty_detector.prototypes),
             "sha256": extracted.sha256,
             "file_name": p.name,
+            "saved_checkpoint": saved_to,
         }
 
 
@@ -221,29 +462,31 @@ class InferenceEngine:
             )
 
         try:
-            stat = path.stat()
-            file_size = stat.st_size
-            mtime = stat.st_mtime
-        except Exception:
+            file_size = path.stat().st_size
+        except OSError:
             file_size = 0
-            mtime = 0.0
 
-        # Tier 0: High-Speed Clean Hash & Reputation Cache Lookup (< 0.05 ms)
-        if self.hash_cache.enabled and not bypass_cache and file_size > 0:
-            cached_res = self.hash_cache.lookup_file(path, mtime=mtime, file_size=file_size)
+        # Content hash first: the cache key is what the file IS, not what its timestamp says.
+        try:
+            file_sha256 = sha256_file(path) if file_size > 0 else ""
+        except OSError:
+            file_sha256 = ""
+        fingerprint = self.cache_fingerprint()
+
+        # Tier 0: cached verdict for identical bytes under the identical engine
+        if self.hash_cache.enabled and not bypass_cache and file_sha256:
+            cached_res = self.hash_cache.lookup(file_sha256, fingerprint, file_path=path)
             if cached_res is not None:
                 return cached_res
+
+        if self.bundle is not None:
+            return self._analyze_with_bundle(path, file_size, file_sha256, fingerprint, start_t, bypass_signature)
 
         # Tier 1: Windows Authenticode & System Catalog Verification (< 1-15 ms)
         if self.signature_verifier.enabled and not bypass_signature and file_size > 0:
             sig_status = self.signature_verifier.verify_file(path)
             if sig_status.is_trusted:
                 sig_duration = (time.time() - start_t) * 1000.0
-                try:
-                    with open(path, "rb") as f:
-                        file_sha256 = hashlib.sha256(f.read()).hexdigest()
-                except Exception:
-                    file_sha256 = ""
 
                 signer_desc = f" (Signer: {sig_status.subject})" if sig_status.subject else ""
                 sig_res = ScanResult(
@@ -266,11 +509,30 @@ class InferenceEngine:
                     warning_message=None,
                 )
                 if self.hash_cache.enabled and file_sha256:
-                    self.hash_cache.record_scan_result(sig_res, mtime=mtime, source="Authenticode")
+                    self.hash_cache.record_scan_result(sig_res, fingerprint, source="Authenticode")
                 return sig_res
 
         # Tier 2: Static feature extraction
-        extracted = self.extractor.extract_from_file(path)
+        if self.extraction_pool is not None:
+            from threatweaver.sandboxing import ExtractionFailure
+            extracted = self.extraction_pool.run("legacy_features", str(path))
+            if isinstance(extracted, ExtractionFailure):
+                return ScanResult(
+                    file_path=str(path),
+                    file_name=path.name,
+                    file_size_bytes=file_size,
+                    sha256=file_sha256,
+                    verdict=ScanVerdict.ANALYSIS_ERROR,
+                    malware_probability=0.0,
+                    novelty_score=0.0,
+                    is_novel=False,
+                    evidence_points=[f"Static parsing stopped by isolation ({extracted.reason}): {extracted.detail}"],
+                    scan_duration_ms=(time.time() - start_t) * 1000.0,
+                    model_version=self.model_version,
+                    warning_message=f"Parsing {extracted.reason}; no verdict produced. Treat as unknown, not benign.",
+                )
+        else:
+            extracted = self.extractor.extract_from_file(path)
         extract_time_ms = (time.time() - start_t) * 1000.0
 
         if not extracted.is_valid_pe:
@@ -377,6 +639,6 @@ class InferenceEngine:
         )
 
         if self.hash_cache.enabled and extracted.is_valid_pe and extracted.sha256:
-            self.hash_cache.record_scan_result(res, mtime=mtime, source="Neural")
+            self.hash_cache.record_scan_result(res, fingerprint, source="Neural")
 
         return res

@@ -1,5 +1,11 @@
 # ThreatWeaver v0.1.0 — Initial Release
 
+> **Correction (2026-11-21).** Several figures in these notes could not be traced to the shipped model and are superseded:
+> the shipped model's locked-test results are macro-F1 0.868, ROC-AUC 0.937, ECE 0.046 and detection rate 0.18 at 1% FPR
+> (`artifacts/benchmarks/selected_embedding_dimension.json`). The "0.00% System32 FPR" result came from the Authenticode tier
+> skipping the model for signed files; with that tier disabled the model scored 19% of 200 System32 `.exe` files at P(malware) ≥ 0.5.
+> The shipped encoder is a plain MLP (no residual blocks). See README "Measured Results" and `ROADMAP_PROGRESS.md`.
+
 ThreatWeaver is a defensive cybersecurity research platform and next-generation Windows antivirus prototype engineered for static Portable Executable (PE) inspection without execution.
 
 Combining deep neural representation learning, temperature-calibrated uncertainty estimation, out-of-distribution novelty detection, and catastrophic-forgetting-resistant continual adaptation, ThreatWeaver delivers robust binary triage with zero dynamic execution risks.

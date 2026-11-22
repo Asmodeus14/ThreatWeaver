@@ -1,0 +1,323 @@
+@import "@fontsource-variable/mona-sans/wdth.css";
+@import "@fontsource-variable/jetbrains-mono/wght.css";
+
+/*
+ * ThreatWeaver, black and white. The interface recedes into black/white and greys so that the
+ * only colour on screen is a verdict that needs attention (red, orange, violet). Benign and
+ * trusted are greys, told apart by glyph shape. Frosted translucent chrome; content scrolls under.
+ */
+:root {
+  /* Ground: pure black in dark (light theme below) */
+  --ground: #000000;
+  --ground-raised: #1c1c1e;
+  --field-a: transparent;
+  --field-b: transparent;
+  --field-c: transparent;
+
+  /* Surfaces and frosted chrome */
+  --glass: #161618;
+  --glass-strong: rgba(28, 28, 30, 0.82);
+  --chrome: rgba(10, 10, 11, 0.72);
+  --glass-hover: rgba(255, 255, 255, 0.06);
+  --glass-edge: rgba(255, 255, 255, 0.08);
+  --glass-edge-strong: rgba(255, 255, 255, 0.14);
+  --specular: rgba(255, 255, 255, 0.06);
+  --glass-blur: blur(28px) saturate(1.6);
+  --shadow-1: none;
+  --shadow-2: 0 24px 80px -12px rgba(0, 0, 0, 0.8);
+
+  /* Ink */
+  --ink: #f5f5f7;
+  --ink-2: #a1a1a6;
+  --ink-3: #86868b;
+  --rule: rgba(255, 255, 255, 0.08);
+  --rule-strong: rgba(255, 255, 255, 0.16);
+  --well: rgba(255, 255, 255, 0.06);
+
+  /* "Accent" is the ink itself: white controls on black */
+  --accent: #f5f5f7;
+  --accent-ink: #000000;
+  --accent-soft: rgba(255, 255, 255, 0.1);
+  --accent-glow: rgba(0, 0, 0, 0);
+
+  /* Verdict tones: colour only where attention is needed */
+  --danger: #ff453a;
+  --danger-soft: rgba(255, 69, 58, 0.14);
+  --warning: #ff9f0a;
+  --warning-soft: rgba(255, 159, 10, 0.14);
+  --novel: #bf5af2;
+  --novel-soft: rgba(191, 90, 242, 0.14);
+  --trusted: #e5e5ea;
+  --trusted-soft: rgba(255, 255, 255, 0.08);
+  --ok: #a1a1a6;
+  --ok-soft: rgba(255, 255, 255, 0.06);
+  --muted: #8e8e93;
+  --muted-soft: rgba(255, 255, 255, 0.06);
+
+  /* Score zones: greys that deepen toward the high-confidence end */
+  --zone-low: rgba(255, 255, 255, 0.05);
+  --zone-review: rgba(255, 255, 255, 0.13);
+  --zone-high: rgba(255, 255, 255, 0.26);
+
+  /* Type */
+  --font: "Mona Sans Variable", -apple-system, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --fs-2xs: 11px;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 17px;
+  --fs-xl: 21px;
+  --fs-2xl: 32px;
+  --fs-3xl: 40px;
+
+  /* Space (4px grid) and shape */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+  --r-sm: 8px;
+  --r: 12px;
+  --r-lg: 20px;
+  --pill: 980px;
+  --rail: 236px;
+  --rail-collapsed: 68px;
+  --content-max: 1320px;
+
+  /* Motion: critically damped feel, no overshoot for chrome */
+  --ease: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;
+  --dur: 220ms;
+  --dur-slow: 360ms;
+  color-scheme: dark;
+
+  /* Aliases kept for older components and charts */
+  --surface: var(--ground-raised);
+  --porcelain: var(--ground);
+  --signal: var(--ink);
+  --signal-ink: var(--accent-ink);
+  --signal-soft: var(--accent-soft);
+  --slate: var(--ink-2);
+  --faint: var(--ink-3);
+}
+
+/* Light: ink on paper */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --ground: #f5f5f7;
+    --ground-raised: #ffffff;
+    --glass: #ffffff;
+    --glass-strong: rgba(255, 255, 255, 0.86);
+    --chrome: rgba(245, 245, 247, 0.76);
+    --glass-hover: rgba(0, 0, 0, 0.04);
+    --glass-edge: rgba(0, 0, 0, 0.07);
+    --glass-edge-strong: rgba(0, 0, 0, 0.12);
+    --specular: rgba(255, 255, 255, 0.9);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 28px -10px rgba(0, 0, 0, 0.08);
+    --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.06), 0 30px 80px -20px rgba(0, 0, 0, 0.25);
+    --ink: #1d1d1f;
+    --ink-2: #424245;
+    --ink-3: #6e6e73;
+    --rule: rgba(0, 0, 0, 0.08);
+    --rule-strong: rgba(0, 0, 0, 0.16);
+    --well: rgba(0, 0, 0, 0.04);
+    --accent: #1d1d1f;
+    --accent-ink: #ffffff;
+    --accent-soft: rgba(0, 0, 0, 0.06);
+    --danger: #d70015;
+    --danger-soft: rgba(215, 0, 21, 0.08);
+    --warning: #b25000;
+    --warning-soft: rgba(201, 52, 0, 0.09);
+    --novel: #8944ab;
+    --novel-soft: rgba(137, 68, 171, 0.09);
+    --trusted: #1d1d1f;
+    --trusted-soft: rgba(0, 0, 0, 0.06);
+    --ok: #6e6e73;
+    --ok-soft: rgba(0, 0, 0, 0.04);
+    --muted: #737378;
+    --muted-soft: rgba(0, 0, 0, 0.05);
+    --zone-low: rgba(0, 0, 0, 0.05);
+    --zone-review: rgba(0, 0, 0, 0.13);
+    --zone-high: rgba(0, 0, 0, 0.26);
+    color-scheme: light;
+  }
+}
+
+:root[data-theme="light"] {
+  --ground: #f5f5f7;
+  --ground-raised: #ffffff;
+  --glass: #ffffff;
+  --glass-strong: rgba(255, 255, 255, 0.86);
+  --chrome: rgba(245, 245, 247, 0.76);
+  --glass-hover: rgba(0, 0, 0, 0.04);
+  --glass-edge: rgba(0, 0, 0, 0.07);
+  --glass-edge-strong: rgba(0, 0, 0, 0.12);
+  --specular: rgba(255, 255, 255, 0.9);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 28px -10px rgba(0, 0, 0, 0.08);
+  --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.06), 0 30px 80px -20px rgba(0, 0, 0, 0.25);
+  --ink: #1d1d1f;
+  --ink-2: #424245;
+  --ink-3: #6e6e73;
+  --rule: rgba(0, 0, 0, 0.08);
+  --rule-strong: rgba(0, 0, 0, 0.16);
+  --well: rgba(0, 0, 0, 0.04);
+  --accent: #1d1d1f;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(0, 0, 0, 0.06);
+  --danger: #d70015;
+  --danger-soft: rgba(215, 0, 21, 0.08);
+  --warning: #b25000;
+  --warning-soft: rgba(201, 52, 0, 0.09);
+  --novel: #8944ab;
+  --novel-soft: rgba(137, 68, 171, 0.09);
+  --trusted: #1d1d1f;
+  --trusted-soft: rgba(0, 0, 0, 0.06);
+  --ok: #6e6e73;
+  --ok-soft: rgba(0, 0, 0, 0.04);
+  --muted: #737378;
+  --muted-soft: rgba(0, 0, 0, 0.05);
+  --zone-low: rgba(0, 0, 0, 0.05);
+  --zone-review: rgba(0, 0, 0, 0.13);
+  --zone-high: rgba(0, 0, 0, 0.26);
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--ground);
+}
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  background: var(--ground);
+  font-family: var(--font);
+  font-size: var(--fs-md);
+  line-height: 1.47;
+  letter-spacing: -0.005em;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color var(--dur-slow) var(--ease), color var(--dur-slow) var(--ease);
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 650;
+  text-wrap: balance;
+}
+h1 {
+  font-size: var(--fs-2xl);
+  line-height: 1.1;
+  letter-spacing: -0.028em;
+}
+h2 {
+  font-size: var(--fs-lg);
+  line-height: 1.25;
+  letter-spacing: -0.016em;
+}
+h3 {
+  font-size: var(--fs-md);
+  letter-spacing: -0.01em;
+}
+p {
+  margin: 0;
+  max-width: 72ch;
+}
+a {
+  color: var(--ink);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--rule-strong);
+}
+a:hover {
+  text-decoration-color: currentColor;
+}
+code,
+.mono {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  letter-spacing: 0;
+  font-variant-ligatures: none;
+}
+
+::selection {
+  background: var(--ink);
+  color: var(--ground);
+}
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+input,
+textarea {
+  caret-color: var(--ink);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-strong) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--rule-strong);
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Frosted chrome: sidebar, top bar. Content scrolls underneath. */
+.glass {
+  background: var(--chrome);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-edge);
+  box-shadow: none;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --chrome: var(--ground);
+    --glass-strong: var(--ground-raised);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --chrome: var(--ground);
+    --glass-strong: var(--ground-raised);
+    --glass-blur: none;
+  }
+}
+@media (prefers-contrast: more) {
+  :root {
+    --rule: var(--rule-strong);
+    --glass-edge: var(--rule-strong);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

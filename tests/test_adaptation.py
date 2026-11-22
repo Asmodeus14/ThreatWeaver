@@ -216,6 +216,12 @@ def test_server_adaptation_api(tmp_path: Path):
     httpd = HTTPServer(("127.0.0.1", 0), ThreatWeaverRequestHandler)
     port = httpd.server_address[1]
     base_url = f"http://127.0.0.1:{port}"
+    from threatweaver.app import security
+    ThreatWeaverRequestHandler.api_token = "adapt-test-token"
+    ThreatWeaverRequestHandler.allowed_host_set = security.allowed_hosts("127.0.0.1", port)
+    opener = urllib.request.build_opener()
+    opener.addheaders = [(security.TOKEN_HEADER, "adapt-test-token")]
+    urllib.request.install_opener(opener)
 
     import threading
     t = threading.Thread(target=httpd.serve_forever, daemon=True)
@@ -291,5 +297,6 @@ def test_server_adaptation_api(tmp_path: Path):
             assert data["status"] == "success"
 
     finally:
+        urllib.request.install_opener(urllib.request.build_opener())
         httpd.shutdown()
         httpd.server_close()
